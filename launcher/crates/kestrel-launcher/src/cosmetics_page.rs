@@ -28,6 +28,10 @@ use crate::bundled_previews::{CAPE_THUMBS, SKY_THUMBS};
 const DEFAULT_CAPE_FPS: u32 = 8;
 
 const CAPE_CARD: Vec2 = Vec2::new(112.0, 150.0);
+/// Kill effects tab: list column width, its minimum height and the preview size.
+const KILL_LIST_W: f32 = 330.0;
+const KILL_LIST_MIN_H: f32 = 260.0;
+const KILL_PREVIEW: Vec2 = Vec2::new(300.0, 260.0);
 const SKY_CARD: Vec2 = Vec2::new(228.0, 120.0);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -420,10 +424,36 @@ impl CosmeticsPage {
             KILL_EFFECTS.len(),
         );
         ui.add_space(6.0);
-        ui.horizontal_top(|ui| {
-            // Effect list.
-            ui.vertical(|ui| {
-                ui.set_width(330.0);
+        // The effect list scrolls on its own while the preview stays put, so the
+        // preview is always in view however far down the list you go. The list
+        // fills the height that's left in the window (recomputed every frame, so
+        // resizing just works); on narrow windows the preview sits above it.
+        let side_by_side = ui.available_width() >= KILL_LIST_W + 12.0 + KILL_PREVIEW.x;
+        if side_by_side {
+            ui.horizontal_top(|ui| {
+                let list_h = (ui.available_height() - 8.0).max(KILL_LIST_MIN_H);
+                ui.vertical(|ui| {
+                    ui.set_width(KILL_LIST_W);
+                    self.kill_effect_list(ui, time, shown_n, list_h);
+                });
+                ui.add_space(12.0);
+                ui.vertical(|ui| self.kill_effect_preview(ui, time));
+            });
+        } else {
+            self.kill_effect_preview(ui, time);
+            ui.add_space(8.0);
+            let list_h = (ui.available_height() - 8.0).max(KILL_LIST_MIN_H);
+            self.kill_effect_list(ui, time, shown_n, list_h);
+        }
+    }
+
+    /// The kill effect list, in its own scroll area `height` tall.
+    fn kill_effect_list(&mut self, ui: &mut egui::Ui, time: f64, shown_n: usize, height: f32) {
+        egui::ScrollArea::vertical()
+            .id_salt("kill_effect_list")
+            .max_height(height)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
                 if shown_n == 0 {
                     ui.label(RichText::new("Nothing matches.").color(MUTED));
                 }
@@ -433,18 +463,33 @@ impl CosmeticsPage {
                 {
                     let equipped = self.settings.kill_effects.effect == e.id;
                     let resp = egui::Frame::NONE
-                        .fill(if equipped { ACCENT.gamma_multiply(0.25) } else { CARD })
-                        .stroke(if equipped { Stroke::new(1.0, ACCENT) } else { Stroke::NONE })
+                        .fill(if equipped {
+                            ACCENT.gamma_multiply(0.25)
+                        } else {
+                            CARD
+                        })
+                        .stroke(if equipped {
+                            Stroke::new(1.0, ACCENT)
+                        } else {
+                            Stroke::NONE
+                        })
                         .corner_radius(CornerRadius::same(6))
                         .inner_margin(8.0)
                         .show(ui, |ui| {
-                            ui.set_width(314.0);
+                            ui.set_width(KILL_LIST_W - 16.0 - 12.0);
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(e.name).family(theme::semibold_family()).strong());
                                 ui.label(
-                                    RichText::new(category_label(KILL_EFFECT_CATEGORIES, e.category))
-                                        .small()
-                                        .color(MUTED),
+                                    RichText::new(e.name)
+                                        .family(theme::semibold_family())
+                                        .strong(),
+                                );
+                                ui.label(
+                                    RichText::new(category_label(
+                                        KILL_EFFECT_CATEGORIES,
+                                        e.category,
+                                    ))
+                                    .small()
+                                    .color(MUTED),
                                 );
                                 if e.uses_color {
                                     ui.label(RichText::new("COLOUR").small().color(WARN));
@@ -469,41 +514,48 @@ impl CosmeticsPage {
                     ui.add_space(4.0);
                 }
             });
-            ui.add_space(12.0);
-            // Animated preview.
-            ui.vertical(|ui| {
-                let shown = self
-                    .preview_effect
-                    .clone()
-                    .unwrap_or_else(|| self.settings.kill_effects.effect.clone());
-                let name = KILL_EFFECTS
-                    .iter()
-                    .find(|e| e.id == shown)
-                    .map(|e| e.name)
-                    .unwrap_or("");
-                ui.label(RichText::new(format!("Preview: {name}")).family(theme::semibold_family()).strong());
-                let (resp, painter) = ui.allocate_painter(Vec2::new(300.0, 260.0), Sense::click());
-                painter.rect_filled(resp.rect, CornerRadius::same(8), Color32::from_rgb(0x0E, 0x10, 0x14));
-                let t = ((time - self.preview_started) % 2.2) as f32;
-                draw_effect_preview(
-                    &painter,
-                    resp.rect,
-                    &shown,
-                    t,
-                    self.settings.kill_effects.intensity,
-                    self.settings.kill_effects.color,
-                );
-                ui.ctx().request_repaint_after(Duration::from_millis(16));
-                ui.label(
-                    RichText::new("Approximate 2D preview. For the real effect in-game: Right Shift > Kill effects > Preview effect.")
-                        .small()
-                        .color(MUTED),
-                );
-                if !self.settings.kill_effects.enabled {
-                    ui.label(RichText::new("Kill effects are disabled.").color(WARN));
-                }
-            });
-        });
+    }
+
+    /// The animated preview of the hovered (or equipped) kill effect.
+    fn kill_effect_preview(&mut self, ui: &mut egui::Ui, time: f64) {
+        let shown = self
+            .preview_effect
+            .clone()
+            .unwrap_or_else(|| self.settings.kill_effects.effect.clone());
+        let name = KILL_EFFECTS
+            .iter()
+            .find(|e| e.id == shown)
+            .map(|e| e.name)
+            .unwrap_or("");
+        ui.label(
+            RichText::new(format!("Preview: {name}"))
+                .family(theme::semibold_family())
+                .strong(),
+        );
+        let (resp, painter) = ui.allocate_painter(KILL_PREVIEW, Sense::click());
+        painter.rect_filled(
+            resp.rect,
+            CornerRadius::same(8),
+            Color32::from_rgb(0x0E, 0x10, 0x14),
+        );
+        let t = ((time - self.preview_started) % 2.2) as f32;
+        draw_effect_preview(
+            &painter,
+            resp.rect,
+            &shown,
+            t,
+            self.settings.kill_effects.intensity,
+            self.settings.kill_effects.color,
+        );
+        ui.ctx().request_repaint_after(Duration::from_millis(16));
+        ui.label(
+            RichText::new("Approximate 2D preview. For the real effect in-game: Right Shift > Kill effects > Preview effect.")
+                .small()
+                .color(MUTED),
+        );
+        if !self.settings.kill_effects.enabled {
+            ui.label(RichText::new("Kill effects are disabled.").color(WARN));
+        }
     }
 
     // ---- skies --------------------------------------------------------------
