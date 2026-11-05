@@ -334,7 +334,7 @@ impl PresenceService {
         let status = Arc::new(Mutex::new(Status::Disabled));
         let st = status.clone();
         let spawned = std::thread::Builder::new()
-            .name("Kestrel-Discord".into())
+            .name("night-discord".into())
             .spawn(move || {
                 run(rx, connector, st);
                 let _ = done_tx.send(());
@@ -551,7 +551,7 @@ mod tests {
             state: Some("Minecraft 1.8.9".into()),
             start_unix: Some(1_700_000_000),
             large_image: Some("kestrel".into()),
-            large_text: Some("Kestrel 0.4.0".into()),
+            large_text: Some("Night Launcher 1.0.0".into()),
         };
         let v = activity_command(Some(&p), 42, "n1");
         assert_eq!(v["cmd"], "SET_ACTIVITY");

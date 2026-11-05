@@ -51,7 +51,7 @@ fn install_crash_handler(log_dir: PathBuf) {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let report = format!(
-            "Kestrel launcher {} crashed\n{info}\n\nbacktrace:\n{}",
+            "Night Launcher {} crashed\n{info}\n\nbacktrace:\n{}",
             kestrel_core::LAUNCHER_VERSION,
             std::backtrace::Backtrace::force_capture()
         );
@@ -67,7 +67,7 @@ fn install_crash_handler(log_dir: PathBuf) {
 }
 
 fn main() -> eframe::Result {
-    // `Kestrel.exe --self-check <report.txt> [--root <dir>]`: verify the
+    // `NightLauncher.exe --self-check <report.txt> [--root <dir>]`: verify the
     // packaged executable without opening a window (used by release.ps1).
     let args: Vec<String> = std::env::args().collect();
     if let Some(i) = args.iter().position(|a| a == "--self-check") {
@@ -87,7 +87,7 @@ fn main() -> eframe::Result {
     // `--no-fallback` marks the second attempt, started after the first renderer failed.
     let fallback_allowed = !args.iter().any(|a| a == "--no-fallback");
     log::info!(
-        "Kestrel {} starting on {} ({}); renderer {}",
+        "Night Launcher {} starting on {} ({}); renderer {}",
         kestrel_core::LAUNCHER_VERSION,
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -96,7 +96,7 @@ fn main() -> eframe::Result {
 
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Kestrel")
+            .with_title("Night Launcher")
             .with_inner_size([1040.0, 640.0])
             .with_min_inner_size([800.0, 540.0])
             .with_icon(std::sync::Arc::new(
@@ -113,7 +113,7 @@ fn main() -> eframe::Result {
     // A renderer that panics during start-up counts as a failure too.
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         eframe::run_native(
-            "Kestrel",
+            "Night Launcher",
             options,
             Box::new(move |cc| {
                 // Reaching this point means the renderer initialised.
@@ -135,7 +135,7 @@ fn main() -> eframe::Result {
     };
     if started.load(std::sync::atomic::Ordering::SeqCst) {
         // Failed after the window was up: not a start-up problem.
-        graphics::show_fatal(&format!("Kestrel stopped unexpectedly: {error}"));
+        graphics::show_fatal(&format!("Night Launcher stopped unexpectedly: {error}"));
         return Ok(());
     }
     log::error!("{} renderer failed to start: {error}", gfx.id());
@@ -144,7 +144,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     graphics::show_fatal(&format!(
-        "Kestrel could not open its window: no working graphics renderer was found.\n\n\
+        "Night Launcher could not open its window: no working graphics renderer was found.\n\n\
          Last error: {error}\n\n\
          Update your graphics driver. In a virtual machine, enable 3D acceleration and install the \
          guest tools. Note that Minecraft itself also needs OpenGL 2.0 or newer.\n\n\

@@ -332,7 +332,7 @@ impl SkinPage {
 
         ui.label(
             RichText::new(
-                "Local skin changer: the skin is shown only in your own Kestrel client. Nothing is uploaded to \
+                "Local skin changer: the skin is shown only in your own Night client. Nothing is uploaded to \
                  your Microsoft/Mojang account and other players keep seeing your real account skin.",
             )
             .color(MUTED),

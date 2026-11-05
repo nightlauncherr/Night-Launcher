@@ -53,7 +53,7 @@ impl Default for UreqTransport {
             .timeout_recv_response(Some(Duration::from_secs(30)))
             .timeout_recv_body(Some(Duration::from_secs(15 * 60)))
             // No identifying data beyond the product version.
-            .user_agent(format!("Kestrel-Launcher/{}", crate::LAUNCHER_VERSION))
+            .user_agent(format!("Night-Launcher/{}", crate::LAUNCHER_VERSION))
             .build();
         UreqTransport {
             agent: config.into(),

@@ -228,7 +228,7 @@ pub fn show_fatal(message: &str) {
                 .collect::<Vec<u16>>()
         };
         let text = wide(message);
-        let title = wide("Kestrel could not start");
+        let title = wide("Night Launcher could not start");
         // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive
         // the call; a null owner window is allowed.
         unsafe {

@@ -783,7 +783,7 @@ pub fn http_fetch(url: &str, limit: u64) -> std::result::Result<Vec<u8>, String>
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .max_redirects(0)
-        .user_agent(format!("Kestrel-Launcher/{}", crate::LAUNCHER_VERSION))
+        .user_agent(format!("Night-Launcher/{}", crate::LAUNCHER_VERSION))
         .build()
         .into();
     match agent.get(url).call() {

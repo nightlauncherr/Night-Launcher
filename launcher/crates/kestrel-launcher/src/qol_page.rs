@@ -23,8 +23,8 @@ use kestrel_core::resourcepacks::{self, PackInfo, PackScan, Selection};
 use crate::app::{ACCENT, ERR, MUTED, OK, WARN, card, open_path};
 use crate::theme;
 
-const ICON_BG: Color32 = Color32::from_rgb(0x30, 0x33, 0x39);
-const ROW: Color32 = Color32::from_rgb(0x1E, 0x21, 0x25);
+const ICON_BG: Color32 = theme::SURFACE_TOP;
+const ROW: Color32 = theme::SURFACE_HI;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -361,7 +361,7 @@ impl QolPage {
                 );
                 ui.label(
                     RichText::new(
-                        "Kestrel's own features are built in. To add a Forge mod made for Minecraft 1.8.9, click \
+                        "Night's own features are built in. To add a Forge mod made for Minecraft 1.8.9, click \
                          Install mod… and choose its .jar file.",
                     )
                     .color(MUTED),
@@ -795,7 +795,7 @@ impl QolPage {
             let mut choice = None;
             let r = egui::Modal::new(egui::Id::unique("qol_confirm_install")).show(ctx, |ui| {
                 ui.set_width(420.0);
-                ui.label(RichText::new("Install a mod Kestrel can't verify?").size(17.0).family(theme::semibold_family()).strong());
+                ui.label(RichText::new("Install a mod Night Launcher can't verify?").size(17.0).family(theme::semibold_family()).strong());
                 ui.add_space(6.0);
                 ui.label(format!(
                     "{} ({})",
@@ -843,7 +843,7 @@ impl QolPage {
                 ui.label(RichText::new(format!("Remove {}?", m.display_name())).size(17.0).family(theme::semibold_family()).strong());
                 ui.add_space(6.0);
                 ui.label(format!(
-                    "{} is moved to Kestrel's removed-mods folder ({}). You can restore it from \"Recently removed\".",
+                    "{} is moved to Night Launcher's removed-mods folder ({}). You can restore it from \"Recently removed\".",
                     m.file_name,
                     self.layout.mod_trash().display()
                 ));
@@ -968,7 +968,7 @@ fn mod_row(ui: &mut egui::Ui, m: &ModEntry, locked: bool) -> Option<ModAction> {
                     if m.builtin {
                         ui.label(
                             RichText::new(format!(
-                                "{} · built into Kestrel.exe and updated with it; managed automatically",
+                                "{} · built into NightLauncher.exe and updated with it; managed automatically",
                                 m.file_name
                             ))
                             .small()

@@ -128,7 +128,7 @@ impl Downloader {
         let config = ureq::Agent::config_builder()
             .timeout_connect(Some(Duration::from_secs(15)))
             .timeout_recv_body(Some(Duration::from_secs(60)))
-            .user_agent(format!("Kestrel-Launcher/{}", crate::LAUNCHER_VERSION))
+            .user_agent(format!("Night-Launcher/{}", crate::LAUNCHER_VERSION))
             .build();
         Downloader {
             agent: config.into(),

@@ -24,7 +24,7 @@ app has to exist there. Kestrel does not ship an application ID.
 1. Open <https://discord.com/developers/applications> → **New Application** → name it
    `Kestrel`.
 2. **Rich Presence → Art Assets**: upload the Kestrel logo
-   (`launcher/crates/kestrel-launcher/assets/kestrel.png`, at least 512×512 recommended)
+   (`launcher/crates/kestrel-launcher/assets/night-icon.png`, at least 512×512 recommended)
    with the key `kestrel`.
 3. **General Information**: copy the **Application ID**.
 4. Kestrel → **Settings → Advanced**: tick **Discord Rich Presence** (on by default) and

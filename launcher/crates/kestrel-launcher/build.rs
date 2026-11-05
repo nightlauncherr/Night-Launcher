@@ -2,7 +2,7 @@
 //!
 //! * Embeds the client mod jar when `KESTREL_EMBED_MOD_JAR` points to it
 //!   (set by scripts/release.ps1 and scripts/build.ps1), producing a
-//!   standalone `Kestrel.exe`. Without it the launcher falls back to
+//!   standalone `NightLauncher.exe`. Without it the launcher falls back to
 //!   `<exe dir>/client/kestrel-*.jar` (development builds).
 //! * On Windows targets, adds the icon and version information.
 
@@ -14,7 +14,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=KESTREL_EMBED_MOD_JAR");
     println!("cargo:rerun-if-env-changed=KESTREL_UPDATE_MANIFEST_URL");
     println!("cargo:rerun-if-env-changed=KESTREL_UPDATE_PUBLIC_KEY");
-    println!("cargo:rerun-if-changed=assets/kestrel.ico");
+    println!("cargo:rerun-if-changed=assets/night.ico");
     let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let generated = out.join("embedded_mod.rs");
 
@@ -61,7 +61,7 @@ fn main() {
 
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let mut res = winresource::WindowsResource::new();
-        res.set_icon("assets/kestrel.ico");
+        res.set_icon("assets/night.ico");
         if let Err(e) = res.compile() {
             // An icon must never break the build; the exe works without it.
             println!("cargo:warning=could not embed the Windows icon/version info: {e}");

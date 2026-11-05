@@ -94,7 +94,7 @@ pub const CAPE_CATEGORIES: &[(&str, &str)] = &[
     ("static", "Static"),
     ("animated", "Animated"),
     ("special", "Special"),
-    ("kestrel", "Kestrel"),
+    ("kestrel", "Night"),
 ];
 
 impl CapeEntry {
@@ -180,7 +180,7 @@ pub const SKY_CATEGORIES: &[(&str, &str)] = &[
     ("fantasy", "Fantasy"),
     ("minimal", "Minimal"),
     ("blocky", "Blocky"),
-    ("kestrel", "Kestrel"),
+    ("kestrel", "Night"),
 ];
 
 /// A bundled sky from `skies.json` (atlas `sky/<id>.png`, thumbnail `sky/thumbs/<id>.png`).
@@ -415,7 +415,7 @@ pub const KILL_EFFECT_CATEGORIES: &[(&str, &str)] = &[
     ("ELEMENTAL", "Elemental"),
     ("MAGIC", "Magic"),
     ("CELEBRATION", "Celebration"),
-    ("KESTREL", "Kestrel"),
+    ("KESTREL", "Signature"),
     ("ADVANCED", "3D"),
 ];
 

@@ -30,8 +30,12 @@ const DEFAULT_CAPE_FPS: u32 = 8;
 const CAPE_CARD: Vec2 = Vec2::new(112.0, 150.0);
 /// Kill effects tab: list column width, its minimum height and the preview size.
 const KILL_LIST_W: f32 = 330.0;
-const KILL_LIST_MIN_H: f32 = 260.0;
+const KILL_LIST_MIN_H: f32 = 200.0;
 const KILL_PREVIEW: Vec2 = Vec2::new(300.0, 260.0);
+/// Smallest preview box height on short windows.
+const KILL_PREVIEW_MIN_H: f32 = 140.0;
+/// Height of the preview's title and caption lines around the box.
+const KILL_PREVIEW_CHROME: f32 = 48.0;
 const SKY_CARD: Vec2 = Vec2::new(228.0, 120.0);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -335,8 +339,8 @@ impl CosmeticsPage {
         }
         ui.label(
             RichText::new(
-                "Local cosmetics: rendered by your Kestrel client only. Other players see them only if they run a \
-                 compatible client that knows about them — Kestrel does not send cosmetics to servers.",
+                "Local cosmetics: rendered by your Night client only. Other players see them only if they run a \
+                 compatible client that knows about them — Night does not send cosmetics to servers.",
             )
             .color(MUTED),
         );
@@ -431,18 +435,24 @@ impl CosmeticsPage {
         let side_by_side = ui.available_width() >= KILL_LIST_W + 12.0 + KILL_PREVIEW.x;
         if side_by_side {
             ui.horizontal_top(|ui| {
-                let list_h = (ui.available_height() - 8.0).max(KILL_LIST_MIN_H);
+                let list_h = (ui.available_height() - 16.0).max(KILL_LIST_MIN_H);
                 ui.vertical(|ui| {
                     ui.set_width(KILL_LIST_W);
                     self.kill_effect_list(ui, time, shown_n, list_h);
                 });
                 ui.add_space(12.0);
-                ui.vertical(|ui| self.kill_effect_preview(ui, time));
+                // The preview shrinks with the list on short windows so both stay in view.
+                let box_h =
+                    (list_h - KILL_PREVIEW_CHROME).clamp(KILL_PREVIEW_MIN_H, KILL_PREVIEW.y);
+                ui.vertical(|ui| self.kill_effect_preview(ui, time, box_h));
             });
         } else {
-            self.kill_effect_preview(ui, time);
+            // Leave the list at least its minimum height below the preview.
+            let box_h = (ui.available_height() - KILL_LIST_MIN_H - KILL_PREVIEW_CHROME - 24.0)
+                .clamp(KILL_PREVIEW_MIN_H, KILL_PREVIEW.y);
+            self.kill_effect_preview(ui, time, box_h);
             ui.add_space(8.0);
-            let list_h = (ui.available_height() - 8.0).max(KILL_LIST_MIN_H);
+            let list_h = (ui.available_height() - 16.0).max(KILL_LIST_MIN_H);
             self.kill_effect_list(ui, time, shown_n, list_h);
         }
     }
@@ -516,8 +526,9 @@ impl CosmeticsPage {
             });
     }
 
-    /// The animated preview of the hovered (or equipped) kill effect.
-    fn kill_effect_preview(&mut self, ui: &mut egui::Ui, time: f64) {
+    /// The animated preview of the hovered (or equipped) kill effect, in a box
+    /// `box_h` tall.
+    fn kill_effect_preview(&mut self, ui: &mut egui::Ui, time: f64, box_h: f32) {
         let shown = self
             .preview_effect
             .clone()
@@ -532,12 +543,8 @@ impl CosmeticsPage {
                 .family(theme::semibold_family())
                 .strong(),
         );
-        let (resp, painter) = ui.allocate_painter(KILL_PREVIEW, Sense::click());
-        painter.rect_filled(
-            resp.rect,
-            CornerRadius::same(8),
-            Color32::from_rgb(0x0E, 0x10, 0x14),
-        );
+        let (resp, painter) = ui.allocate_painter(Vec2::new(KILL_PREVIEW.x, box_h), Sense::hover());
+        painter.rect_filled(resp.rect, CornerRadius::same(8), theme::BG);
         let t = ((time - self.preview_started) % 2.2) as f32;
         draw_effect_preview(
             &painter,
@@ -548,11 +555,11 @@ impl CosmeticsPage {
             self.settings.kill_effects.color,
         );
         ui.ctx().request_repaint_after(Duration::from_millis(16));
-        ui.label(
-            RichText::new("Approximate 2D preview. For the real effect in-game: Right Shift > Kill effects > Preview effect.")
-                .small()
-                .color(MUTED),
-        );
+        const IN_GAME: &str =
+            "For the real effect in-game: Right Shift > Kill effects > Preview effect.";
+        resp.on_hover_text(IN_GAME);
+        ui.label(RichText::new("Approximate 2D preview").small().color(MUTED))
+            .on_hover_text(IN_GAME);
         if !self.settings.kill_effects.enabled {
             ui.label(RichText::new("Kill effects are disabled.").color(WARN));
         }
@@ -816,7 +823,7 @@ impl CosmeticsPage {
         if self.cape_filter.category == MOJANG_CATEGORY.0 {
             ui.label(
                 RichText::new(
-                    "Historical Mojang capes, as local Kestrel cosmetics: only your Kestrel client shows them. \
+                    "Historical Mojang capes, as local Night cosmetics: only your Night client shows them. \
                      Equipping one does not give your account that cape, and other players don't see it. \
                      The original textures are downloaded from Mojang's texture server the first time and kept on your PC.",
                 )
@@ -1201,7 +1208,7 @@ fn thumb(
             p.rect_filled(
                 r.rect,
                 CornerRadius::same(4),
-                Color32::from_rgb(0x30, 0x18, 0x18),
+                theme::ERR.gamma_multiply(0.18),
             );
             p.text(
                 r.rect.center(),

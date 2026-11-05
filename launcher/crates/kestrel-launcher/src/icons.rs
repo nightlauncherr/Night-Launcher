@@ -1,4 +1,4 @@
-//! Kestrel's launcher icons: simple line icons drawn as vector shapes, so
+//! The launcher's icons: simple line icons drawn as vector shapes, so
 //! they stay sharp at every Windows display scale and need no icon font or
 //! image files. Each icon is designed on a 24x24 grid with round joins and
 //! drawn into any square rect.

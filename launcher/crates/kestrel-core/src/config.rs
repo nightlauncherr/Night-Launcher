@@ -94,7 +94,7 @@ pub struct LauncherConfig {
     pub update_required_minimum: String,
     /// Show Kestrel/Minecraft activity in Discord (needs `discord_client_id`).
     pub discord_rpc_enabled: bool,
-    /// Discord application ID of the "Kestrel" app (Developer Portal). Empty
+    /// Discord application ID of the "Night Launcher" app (Developer Portal). Empty
     /// = Rich Presence not configured.
     pub discord_client_id: String,
     /// Launcher renderer: `auto` (OpenGL on Windows), `opengl` or `direct3d`.

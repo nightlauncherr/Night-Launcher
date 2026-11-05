@@ -88,7 +88,7 @@ impl ModEntry {
     /// Name to show: the mod's declared name, else the file name.
     pub fn display_name(&self) -> &str {
         if self.builtin {
-            return "Kestrel client";
+            return "Night client";
         }
         self.meta.name.as_deref().unwrap_or(&self.file_name)
     }
@@ -207,11 +207,11 @@ pub fn inspect(path: &Path) -> (ModMeta, Compat) {
     let other = [
         (
             "fabric.mod.json",
-            "Fabric mod: needs the Fabric loader, Kestrel uses Forge 1.8.9",
+            "Fabric mod: needs the Fabric loader, Night uses Forge 1.8.9",
         ),
         (
             "quilt.mod.json",
-            "Quilt mod: needs the Quilt loader, Kestrel uses Forge 1.8.9",
+            "Quilt mod: needs the Quilt loader, Night uses Forge 1.8.9",
         ),
         (
             "META-INF/neoforge.mods.toml",
@@ -223,7 +223,7 @@ pub fn inspect(path: &Path) -> (ModMeta, Compat) {
         ),
         (
             "litemod.json",
-            "LiteLoader mod: needs LiteLoader, which Kestrel does not install",
+            "LiteLoader mod: needs LiteLoader, which Night Launcher does not install",
         ),
     ];
     let has_mcmod = has(&zip, "mcmod.info");
@@ -456,7 +456,7 @@ fn validate_file_name(name: &str) -> Result<()> {
     }
     if is_reserved_name(name) {
         return Err(Error::Other(format!(
-            "{name}: file names starting with \"kestrel-\" are reserved for Kestrel's built-in client mod; rename the file"
+            "{name}: file names starting with \"kestrel-\" are reserved for Night's built-in client mod; rename the file"
         )));
     }
     if name
@@ -632,7 +632,7 @@ fn managed_name(layout: &Layout, path: &Path, allowed: &[PathBuf]) -> Result<Str
     }
     if parent == layout.mods() && is_kestrel_jar(path) {
         return Err(Error::Other(
-            "Kestrel's own client mod is built into Kestrel.exe and reinstalled on every Play; it can't be disabled or removed here".into(),
+            "Night's own client mod is built into NightLauncher.exe and reinstalled on every Play; it can't be disabled or removed here".into(),
         ));
     }
     if !path.is_file() {
@@ -1058,7 +1058,11 @@ mod tests {
         fs::create_dir_all(l.mods()).unwrap();
         fs::write(&builtin, b"x").unwrap();
         for r in [disable(&l, &builtin), remove(&l, &builtin)] {
-            assert!(r.unwrap_err().to_string().contains("built into Kestrel"));
+            assert!(
+                r.unwrap_err()
+                    .to_string()
+                    .contains("built into NightLauncher")
+            );
         }
         assert!(builtin.exists());
         // Files outside the managed folders (e.g. libraries) are refused.

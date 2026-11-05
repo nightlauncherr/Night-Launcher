@@ -1,4 +1,4 @@
-//! Self-updater for the Kestrel launcher.
+//! Self-updater for Night Launcher.
 //!
 //! * [`manifest`]: signed release metadata (Ed25519) and its validation.
 //! * [`fetch`]: HTTPS transport with checked redirects and verified downloads.
@@ -43,7 +43,7 @@ pub enum UpdateError {
     Validation(String),
     #[error("{0}")]
     Install(String),
-    #[error("Kestrel cannot replace itself in {0} (no write permission)")]
+    #[error("Night Launcher cannot replace itself in {0} (no write permission)")]
     NotWritable(PathBuf),
     #[error("update cancelled")]
     Cancelled,
@@ -250,8 +250,10 @@ impl Validator for SelfCheckValidator {
                 .unwrap_or("no report");
             return Err(format!("self-test failed ({status}): {first_fail}"));
         }
-        if !text.contains(&format!("Kestrel {expected} ")) {
-            return Err(format!("the downloaded file is not Kestrel {expected}"));
+        if !text.contains(&format!("Night Launcher {expected} ")) {
+            return Err(format!(
+                "the downloaded file is not Night Launcher {expected}"
+            ));
         }
         Ok(())
     }
@@ -270,7 +272,7 @@ pub fn prepare(
 ) -> Result<PathBuf, UpdateError> {
     let dir = updates_dir(layout);
     install::clean_updates_dir(&dir, None);
-    let name = format!("Kestrel-{}.exe", release.version);
+    let name = format!("NightLauncher-{}.exe", release.version);
     let file = fetch::download_asset(
         t,
         &release.asset,
@@ -503,7 +505,7 @@ mod tests {
         // Full swap with the prepared file, then cleanup by the "new" version.
         let install_dir = d.path().join("Desktop");
         std::fs::create_dir_all(&install_dir).unwrap();
-        let current = install_dir.join("Kestrel.exe");
+        let current = install_dir.join("NightLauncher.exe");
         std::fs::write(&current, b"old").unwrap();
         let backup = install::swap(&current, &file).unwrap();
         assert_eq!(std::fs::read(&current).unwrap(), exe);
@@ -537,7 +539,11 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(e, UpdateError::Validation(_)), "{e}");
-        assert!(!updates_dir(&layout).join("Kestrel-0.2.0.exe").exists());
+        assert!(
+            !updates_dir(&layout)
+                .join("NightLauncher-0.2.0.exe")
+                .exists()
+        );
 
         // Server swaps the binary after the manifest was signed.
         let cdn = "https://release-assets.githubusercontent.com/kestrel/0.2.0";

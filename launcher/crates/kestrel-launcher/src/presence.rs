@@ -56,7 +56,7 @@ pub fn desired(
             state: Some("Minecraft 1.8.9".into()),
             start_unix: Some(start),
             large_image: Some(LARGE_IMAGE_KEY.into()),
-            large_text: Some(format!("Kestrel {LAUNCHER_VERSION}")),
+            large_text: Some(format!("Night Launcher {LAUNCHER_VERSION}")),
         }),
     }
 }

@@ -84,16 +84,16 @@ impl Page {
         match self {
             Page::Home => "",
             Page::Cosmetics => {
-                "Kill effects, skies, capes and your skin, shown in your Kestrel client."
+                "Kill effects, skies, capes and your skin, shown in your Night client."
             }
             Page::Mods => {
-                "Mods, resource packs and performance presets for Kestrel's Minecraft 1.8.9."
+                "Mods, resource packs and performance presets for Night's Minecraft 1.8.9."
             }
             Page::Settings => {
                 "Game window, Java and memory, updates and advanced options. Changes save automatically."
             }
             Page::Account => "Your Microsoft account for online servers, or offline mode.",
-            Page::About => "Versions, where Kestrel keeps its files, and project notes.",
+            Page::About => "Versions, where Night Launcher keeps its files, and project notes.",
             Page::Logs => "Live game output and the launcher's own log.",
         }
     }
@@ -176,7 +176,7 @@ pub struct LauncherApp {
     launcher_started: u64,
     game_started: Option<u64>,
     game_activity: Option<GameActivity>,
-    /// Kestrel mark (the in-game menu's artwork).
+    /// Night Launcher mark (the in-game menu's artwork).
     mark: Option<egui::TextureHandle>,
     /// Backdrop animation clock: advances only while the ribbons are animating.
     backdrop_time: f32,
@@ -207,7 +207,7 @@ impl LauncherApp {
         let updater = Updater::new(layout.clone(), &cfg, &cc.egui_ctx);
         let bundled_mod = crate::worker::bundled_mod(&layout);
         // Fullbright no longer has a launcher toggle (players use a mod for it), so
-        // make sure Kestrel's built-in one can't stay switched on with no way off.
+        // make sure the built-in one can't stay switched on with no way off.
         if kestrel_core::cosmetics::load_state(&layout)
             .settings
             .qol
@@ -221,7 +221,7 @@ impl LauncherApp {
             }
         }
         log::info!(
-            "Kestrel launcher {LAUNCHER_VERSION}; data dir {}; bundled mod {:?}",
+            "Night Launcher {LAUNCHER_VERSION}; data dir {}; bundled mod {:?}",
             layout.root().display(),
             bundled_mod
         );
@@ -354,7 +354,7 @@ impl LauncherApp {
         // A signed release marked this version as no longer supported.
         if let Some(v) = self.updater.required_version(&self.cfg) {
             self.notify(Status::Error(format!(
-                "Kestrel {v} is a required update. Install it before playing."
+                "Night Launcher {v} is a required update. Install it before playing."
             )));
             self.updater.open_prompt(ctx);
             return;
@@ -450,7 +450,7 @@ impl LauncherApp {
                 Msg::Game(GameEvent::ModReady) => {
                     self.mod_seen = true;
                     self.notify(Status::Ok(
-                        "Minecraft is running with the Kestrel client.".into(),
+                        "Minecraft is running with the Night client.".into(),
                     ));
                     if self.cfg.close_on_launch {
                         std::process::exit(0);
@@ -533,15 +533,10 @@ impl LauncherApp {
                 ui.add_space(4.0);
                 ui.vertical(|ui| {
                     ui.add_space(2.0);
-                    ui.label(theme::spaced(
-                        "KESTREL",
-                        theme::bold(17.0),
-                        theme::TEXT,
-                        2.4,
-                    ));
+                    ui.label(theme::spaced("NIGHT", theme::bold(17.0), theme::TEXT, 2.4));
                     ui.add_space(-6.0);
                     ui.label(theme::spaced(
-                        &format!("CLIENT · {MC_VERSION}"),
+                        &format!("LAUNCHER · {MC_VERSION}"),
                         theme::semibold(10.0),
                         ACCENT,
                         1.4,
@@ -646,7 +641,7 @@ impl LauncherApp {
                         ui.multiply_opacity(fade_in * fade_out);
                         ui.add_space((1.0 - fade_in) * 10.0);
                         egui::Frame::NONE
-                            .fill(Color32::from_rgb(0x1E, 0x20, 0x26))
+                            .fill(theme::SURFACE)
                             .stroke(Stroke::new(1.0, c.gamma_multiply(0.6)))
                             .corner_radius(CornerRadius::same(theme::RADIUS))
                             .shadow(egui::Shadow {
@@ -704,7 +699,7 @@ impl LauncherApp {
                 Tone::Warn,
                 "Update required",
                 &format!(
-                    "Kestrel {v} is required to play. This version ({LAUNCHER_VERSION}) can no longer start Minecraft. \
+                    "Night Launcher {v} is required to play. This version ({LAUNCHER_VERSION}) can no longer start Minecraft. \
                      Your settings, accounts, game files, mods and resource packs are kept."
                 ),
             );
@@ -769,7 +764,7 @@ impl LauncherApp {
         ui.add_space(2.0);
         let greeting = match self.player_name() {
             Some(n) if !n.trim().is_empty() => format!("Welcome back, {n}"),
-            _ => "Welcome to Kestrel".to_string(),
+            _ => "Welcome to Night Launcher".to_string(),
         };
         ui.add(
             egui::Label::new(
@@ -792,7 +787,7 @@ impl LauncherApp {
             }
             Busy::Idle => (
                 "PLAY",
-                format!("Kestrel {LAUNCHER_VERSION}  ·  Minecraft {MC_VERSION}"),
+                format!("Night Launcher {LAUNCHER_VERSION}  ·  Minecraft {MC_VERSION}"),
             ),
             Busy::Installing => ("REPAIRING", self.progress.snapshot().0),
             Busy::SigningIn => (
@@ -801,11 +796,11 @@ impl LauncherApp {
             ),
             Busy::Launching => ("STARTING", self.progress.snapshot().0),
             Busy::Running if self.mod_seen => {
-                ("RUNNING", "Minecraft is running with Kestrel".to_string())
+                ("RUNNING", "Minecraft is running with Night".to_string())
             }
             Busy::Running => (
                 "LOADING",
-                "Minecraft is loading the Kestrel client".to_string(),
+                "Minecraft is loading the Night client".to_string(),
             ),
         };
         let progress = match self.busy {
@@ -866,7 +861,7 @@ impl LauncherApp {
                     );
                     theme::pill(
                         ui,
-                        "Kestrel loaded",
+                        "Night client loaded",
                         if self.mod_seen {
                             Tone::Good
                         } else {
@@ -905,7 +900,7 @@ impl LauncherApp {
     fn install_line(&self) -> (&'static str, Tone) {
         match (&self.install, self.install_problems.is_empty()) {
             (None, _) => (
-                "Not installed yet. Play downloads Minecraft, Forge, Java and Kestrel.",
+                "Not installed yet. Play downloads Minecraft, Forge, Java and the Night client.",
                 Tone::Warn,
             ),
             (Some(_), false) => (
@@ -1026,7 +1021,7 @@ impl LauncherApp {
         let (upd_value, upd_detail) = match self.updater.summary() {
             Summary::UpToDate => (
                 "Up to date".to_string(),
-                "You have the latest Kestrel".to_string(),
+                "You have the latest Night Launcher".to_string(),
             ),
             Summary::Available(v) => (
                 format!("{v} available"),
@@ -1065,7 +1060,7 @@ impl LauncherApp {
             (
                 Icon::Clock,
                 "VERSION",
-                format!("Kestrel {LAUNCHER_VERSION}"),
+                format!("v{LAUNCHER_VERSION}"),
                 format!("Minecraft {MC_VERSION}"),
             ),
             (Icon::Download, "UPDATES", upd_value, upd_detail),
@@ -1175,7 +1170,7 @@ impl LauncherApp {
                         ui,
                         "Sign in with Microsoft",
                         "Needed for online servers such as Hypixel. You sign in on microsoft.com in your browser; \
-                         Kestrel never sees your password.",
+                         Night Launcher never sees your password.",
                     );
                     ui.add_space(4.0);
                     let client_id = auth::validate_client_id(self.cfg.msa_client_id());
@@ -1486,8 +1481,8 @@ impl LauncherApp {
             theme::card_title(
                 ui,
                 "Microsoft sign-in",
-                "Kestrel signs in with its own Microsoft app. Only if you registered your own app in Microsoft Entra, \
-                 paste its Application (client) ID here; leave it empty to use Kestrel's.",
+                "Night Launcher signs in with its own Microsoft app. Only if you registered your own app in Microsoft Entra, \
+                 paste its Application (client) ID here; leave it empty to use the built-in one.",
             );
             dirty |= ui
                 .add(
@@ -1498,7 +1493,7 @@ impl LauncherApp {
                 .changed();
             if self.cfg.msa_client_id.trim().is_empty() {
                 ui.label(
-                    RichText::new("Using Kestrel's built-in app.")
+                    RichText::new("Using the built-in app.")
                         .small()
                         .color(MUTED),
                 );
@@ -1522,7 +1517,7 @@ impl LauncherApp {
             theme::card_title(
                 ui,
                 "Launcher renderer",
-                "Takes effect when Kestrel restarts. If the launcher window flickers or the desktop stutters while it redraws, use OpenGL.",
+                "Takes effect when Night Launcher restarts. If the launcher window flickers or the desktop stutters while it redraws, use OpenGL.",
             );
             ui.horizontal(|ui| {
                 let label = |v: &str| match v {
@@ -1563,7 +1558,7 @@ impl LauncherApp {
             dirty |= ui
                 .checkbox(
                     &mut self.cfg.discord_rpc_enabled,
-                    "Show Kestrel and your game state in Discord",
+                    "Show Night Launcher and your game state in Discord",
                 )
                 .changed();
             ui.add_enabled_ui(self.cfg.discord_rpc_enabled, |ui| {
@@ -1582,7 +1577,7 @@ impl LauncherApp {
                     self.discord.status(),
                 ) {
                     (Err(_), _) if self.cfg.discord_client_id.trim().is_empty() => (
-                        "Not configured: create an application named \"Kestrel\" at discord.com/developers, \
+                        "Not configured: create an application named \"Night Launcher\" at discord.com/developers, \
                          upload an art asset named \"kestrel\", and paste its Application ID here."
                             .to_string(),
                         MUTED,
@@ -1657,7 +1652,7 @@ impl LauncherApp {
             &launcher_lines
         };
         egui::Frame::NONE
-            .fill(Color32::from_rgba_premultiplied(0x0B, 0x0C, 0x0E, 0xF0))
+            .fill(theme::BG2.gamma_multiply(0.94))
             .stroke(Stroke::new(1.0, theme::BORDER))
             .corner_radius(CornerRadius::same(theme::RADIUS))
             .inner_margin(egui::Margin::same(12))
@@ -1704,7 +1699,7 @@ impl LauncherApp {
                 ui.vertical(|ui| {
                     ui.add_space(6.0);
                     ui.label(theme::spaced(
-                        "KESTREL",
+                        "NIGHT LAUNCHER",
                         theme::bold(26.0),
                         theme::TEXT,
                         4.0,
@@ -1728,7 +1723,9 @@ impl LauncherApp {
                 .spacing([28.0, 8.0])
                 .show(ui, |ui| {
                     let client_mod = match (&self.bundled_mod, crate::embedded::EMBEDDED_MOD) {
-                        (Some(_), Some(e)) => format!("{} (built into Kestrel.exe)", e.file_name),
+                        (Some(_), Some(e)) => {
+                            format!("{} (built into NightLauncher.exe)", e.file_name)
+                        }
                         (Some(p), None) => p
                             .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
@@ -1782,8 +1779,8 @@ impl LauncherApp {
             theme::card_title(ui, "Notes", "");
             for line in [
                 "Capes, skies and kill effects are rendered on your client only. Other players do not see them \
-                 (except capes the bundled catalog assigns to a specific player, which Kestrel clients draw on that player).",
-                "Kestrel installs into its own directory and never modifies your normal .minecraft folder.",
+                 (except capes the bundled catalog assigns to a specific player, which Night clients draw on that player).",
+                "Night Launcher installs into its own directory and never modifies your normal .minecraft folder.",
                 "Game files are downloaded from Mojang and Forge servers and verified by SHA-1 where hashes are published.",
                 "Inter typeface © The Inter Project Authors, SIL Open Font License 1.1.",
                 "Not affiliated with Mojang or Microsoft.",
@@ -1823,8 +1820,8 @@ impl eframe::App for LauncherApp {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
         let screen = ctx.content_rect();
-        let ribbons = ctx.animate_value_with_time(
-            egui::Id::unique("ribbons-strength"),
+        let backdrop_strength = ctx.animate_value_with_time(
+            egui::Id::unique("backdrop-strength"),
             if self.page == Page::Home { 1.0 } else { 0.4 },
             0.3,
         );
@@ -1837,7 +1834,7 @@ impl eframe::App for LauncherApp {
             &ctx.layer_painter(egui::LayerId::background()),
             screen,
             self.backdrop_time,
-            ribbons,
+            backdrop_strength,
             glow,
         );
 
@@ -2059,10 +2056,16 @@ fn nav_item(
     let p = ui.painter();
     let fill = theme::lerp(
         theme::lerp(Color32::TRANSPARENT, Color32::from_white_alpha(8), hover),
-        Color32::from_rgba_premultiplied(0x2A, 0x1C, 0x12, 0xC0),
+        theme::ACCENT_LO.gamma_multiply(0.24),
         sel,
     );
     p.rect_filled(r, CornerRadius::same(theme::RADIUS_SM), fill);
+    // Purple active indicator on the left edge, growing in as the item is selected.
+    if sel > 0.01 {
+        let bar_h = (h - 16.0) * sel;
+        let bar = Rect::from_center_size(pos2(r.left() + 2.0, r.center().y), Vec2::new(3.0, bar_h));
+        p.rect_filled(bar, CornerRadius::same(2), ACCENT);
+    }
     let fg = theme::lerp(theme::lerp(MUTED, theme::TEXT, hover), theme::TEXT, sel);
     let icon_c = theme::lerp(fg, ACCENT, sel);
     let icon_rect = if compact {

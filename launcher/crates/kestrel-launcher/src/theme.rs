@@ -1,10 +1,13 @@
-//! Kestrel's launcher design system: palette, type, spacing and the shared
+//! Night Launcher's design system: palette, type, spacing and the shared
 //! components every page is built from.
 //!
-//! The palette is the in-game Kestrel main menu's: graphite backgrounds, a
-//! warm Kestrel orange accent and cool grey text. Type is Inter (bundled,
-//! SIL OFL) in three weights. Components are painted by hand so hover and
-//! press states animate smoothly and look the same on every renderer.
+//! The palette is "purple nebula": near-black midnight backgrounds, violet
+//! elevated panels, a purple accent with lavender highlights and a restrained
+//! magenta, and soft lavender-white text. Every colour the launcher's UI uses
+//! comes from the tokens below (kill-effect previews keep their own effect
+//! colours). Type is Inter (bundled, SIL OFL) in three weights. Components are
+//! painted by hand so hover and press states animate smoothly and look the
+//! same on every renderer.
 
 use std::sync::Arc;
 
@@ -18,28 +21,42 @@ use crate::icons::{self, Icon};
 
 // ---- palette ------------------------------------------------------------------
 
-/// Backdrop gradient: lighter graphite at the top left to near black (the in-game menu's).
-pub const BG_TOP: Color32 = Color32::from_rgb(0x26, 0x29, 0x2F);
-pub const BG_BOTTOM: Color32 = Color32::from_rgb(0x0E, 0x0F, 0x12);
-/// Flat background (panels, fallbacks).
-pub const BG: Color32 = Color32::from_rgb(0x15, 0x16, 0x1A);
-pub const SIDEBAR: Color32 = Color32::from_rgba_premultiplied(0x0D, 0x0E, 0x11, 0xE6);
-/// Cards and raised surfaces.
-pub const SURFACE: Color32 = Color32::from_rgb(0x1B, 0x1D, 0x22);
-/// Hovered surfaces, inputs, the inactive part of controls.
-pub const SURFACE_HI: Color32 = Color32::from_rgb(0x25, 0x28, 0x2E);
-pub const BORDER: Color32 = Color32::from_rgb(0x2C, 0x2F, 0x36);
-pub const TEXT: Color32 = Color32::from_rgb(0xEC, 0xEE, 0xF1);
-pub const MUTED: Color32 = Color32::from_rgb(0x9A, 0xA0, 0xA8);
-pub const FAINT: Color32 = Color32::from_rgb(0x6A, 0x70, 0x78);
-pub const ACCENT: Color32 = Color32::from_rgb(0xE8, 0x83, 0x3A);
-pub const ACCENT_HI: Color32 = Color32::from_rgb(0xF4, 0x9C, 0x58);
-pub const ACCENT_LO: Color32 = Color32::from_rgb(0xC9, 0x6A, 0x26);
+/// Backdrop gradient: deep violet at the top left to midnight at the bottom right.
+pub const BG_TOP: Color32 = Color32::from_rgb(0x1A, 0x10, 0x2B);
+pub const BG_BOTTOM: Color32 = Color32::from_rgb(0x0B, 0x07, 0x14);
+/// Primary background (panels, fallbacks).
+pub const BG: Color32 = Color32::from_rgb(0x0B, 0x07, 0x14);
+/// Secondary background: inputs, wells and recessed areas.
+pub const BG2: Color32 = Color32::from_rgb(0x12, 0x0B, 0x20);
+pub const SIDEBAR: Color32 = Color32::from_rgba_premultiplied(0x0A, 0x06, 0x12, 0xE8);
+/// Elevated panels: cards and raised surfaces.
+pub const SURFACE: Color32 = Color32::from_rgb(0x1A, 0x10, 0x2B);
+/// Hovered surfaces, the inactive part of controls.
+pub const SURFACE_HI: Color32 = Color32::from_rgb(0x25, 0x18, 0x3B);
+/// Pressed / strongest surface.
+pub const SURFACE_TOP: Color32 = Color32::from_rgb(0x2F, 0x1F, 0x4A);
+pub const BORDER: Color32 = Color32::from_rgb(0x30, 0x20, 0x44);
+pub const TEXT: Color32 = Color32::from_rgb(0xF3, 0xED, 0xFF);
+/// Control labels: between TEXT and MUTED.
+pub const TEXT_SOFT: Color32 = Color32::from_rgb(0xDD, 0xD2, 0xF0);
+pub const MUTED: Color32 = Color32::from_rgb(0xB8, 0xA9, 0xCC);
+pub const FAINT: Color32 = Color32::from_rgb(0x81, 0x73, 0x91);
+/// Accent: secondary purple, bright enough for text on the dark surfaces.
+pub const ACCENT: Color32 = Color32::from_rgb(0xA1, 0x6B, 0xEF);
+/// Lavender highlight.
+pub const ACCENT_HI: Color32 = Color32::from_rgb(0xC6, 0xA4, 0xFF);
+/// Primary purple: fills under white text.
+pub const ACCENT_LO: Color32 = Color32::from_rgb(0x86, 0x52, 0xD9);
+/// Restrained magenta, for small highlights and the nebula.
+pub const MAGENTA: Color32 = Color32::from_rgb(0xC0, 0x5A, 0xE8);
 /// Text on accent fills.
-pub const ON_ACCENT: Color32 = Color32::from_rgb(0x17, 0x11, 0x0C);
-pub const OK: Color32 = Color32::from_rgb(0x5B, 0xC2, 0x7A);
-pub const WARN: Color32 = Color32::from_rgb(0xE3, 0xB3, 0x41);
-pub const ERR: Color32 = Color32::from_rgb(0xE0, 0x5A, 0x5A);
+pub const ON_ACCENT: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+pub const OK: Color32 = Color32::from_rgb(0x5F, 0xC9, 0x8E);
+pub const WARN: Color32 = Color32::from_rgb(0xE8, 0xB9, 0x5A);
+pub const ERR: Color32 = Color32::from_rgb(0xE8, 0x6A, 0x86);
+/// Disabled / busy primary button.
+pub const BUSY_TOP: Color32 = Color32::from_rgb(0x3A, 0x2A, 0x55);
+pub const BUSY_BOTTOM: Color32 = Color32::from_rgb(0x2C, 0x20, 0x44);
 
 // ---- spacing --------------------------------------------------------------------
 
@@ -135,10 +152,10 @@ pub fn install(ctx: &egui::Context) {
         color: Color32::from_black_alpha(120),
     };
     v.menu_corner_radius = CornerRadius::same(RADIUS_SM);
-    v.extreme_bg_color = Color32::from_rgb(0x10, 0x11, 0x14);
-    v.text_edit_bg_color = Some(Color32::from_rgb(0x12, 0x13, 0x17));
-    v.faint_bg_color = Color32::from_rgb(0x1F, 0x21, 0x26);
-    v.code_bg_color = Color32::from_rgb(0x10, 0x11, 0x14);
+    v.extreme_bg_color = BG2;
+    v.text_edit_bg_color = Some(BG2);
+    v.faint_bg_color = SURFACE_HI;
+    v.code_bg_color = BG2;
     v.selection.bg_fill = ACCENT.gamma_multiply(0.55);
     v.selection.stroke = Stroke::new(1.0, ACCENT_HI);
     v.hyperlink_color = ACCENT_HI;
@@ -157,16 +174,16 @@ pub fn install(ctx: &egui::Context) {
     w.inactive.bg_fill = SURFACE_HI;
     w.inactive.weak_bg_fill = SURFACE_HI;
     w.inactive.bg_stroke = Stroke::new(1.0, BORDER);
-    w.inactive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(0xD6, 0xD9, 0xDE));
+    w.inactive.fg_stroke = Stroke::new(1.0, TEXT_SOFT);
     w.inactive.corner_radius = radius;
-    w.hovered.bg_fill = Color32::from_rgb(0x2D, 0x30, 0x37);
-    w.hovered.weak_bg_fill = Color32::from_rgb(0x2D, 0x30, 0x37);
+    w.hovered.bg_fill = SURFACE_TOP;
+    w.hovered.weak_bg_fill = SURFACE_TOP;
     w.hovered.bg_stroke = Stroke::new(1.0, ACCENT.gamma_multiply(0.75));
     w.hovered.fg_stroke = Stroke::new(1.5, TEXT);
     w.hovered.corner_radius = radius;
     w.hovered.expansion = 0.0;
-    w.active.bg_fill = Color32::from_rgb(0x33, 0x36, 0x3E);
-    w.active.weak_bg_fill = Color32::from_rgb(0x33, 0x36, 0x3E);
+    w.active.bg_fill = SURFACE_TOP;
+    w.active.weak_bg_fill = SURFACE_TOP;
     w.active.bg_stroke = Stroke::new(1.0, ACCENT);
     w.active.fg_stroke = Stroke::new(2.0, Color32::WHITE);
     w.active.corner_radius = radius;
@@ -394,19 +411,14 @@ pub fn button_sized(
         ctx.set_cursor_icon(CursorIcon::PointingHand);
     }
     let (fill, fill_hover, stroke, text_c) = match kind {
-        Kind::Primary => (ACCENT, ACCENT_HI, Color32::TRANSPARENT, ON_ACCENT),
-        Kind::Secondary => (
-            SURFACE_HI,
-            Color32::from_rgb(0x30, 0x33, 0x3A),
-            BORDER,
-            TEXT,
-        ),
+        Kind::Primary => (ACCENT_LO, ACCENT, Color32::TRANSPARENT, ON_ACCENT),
+        Kind::Secondary => (SURFACE_HI, SURFACE_TOP, BORDER, TEXT),
         Kind::Ghost => (Color32::TRANSPARENT, SURFACE_HI, Color32::TRANSPARENT, TEXT),
         Kind::Danger => (
             ERR.gamma_multiply(0.16),
             ERR.gamma_multiply(0.28),
             ERR.gamma_multiply(0.6),
-            Color32::from_rgb(0xFF, 0xB4, 0xB4),
+            Color32::from_rgb(0xFF, 0xC2, 0xD0), // light rose text on the red-tinted fill
         ),
     };
     let mut fill = lerp(fill, fill_hover, hover);
@@ -477,7 +489,7 @@ pub fn play_button(
     let r = rect.shrink(press * 2.0);
     let radius = CornerRadius::same(14);
     let p = ui.painter();
-    // Soft warm glow that grows on hover.
+    // Soft purple glow that grows on hover.
     if enabled {
         let glow = Shadow {
             offset: [0, 8],
@@ -489,14 +501,11 @@ pub fn play_button(
     }
     let busy = progress.is_some();
     let (top, bottom) = if busy || !enabled {
-        (
-            Color32::from_rgb(0x3A, 0x2C, 0x20),
-            Color32::from_rgb(0x2E, 0x24, 0x1B),
-        )
+        (BUSY_TOP, BUSY_BOTTOM)
     } else {
         (
-            lerp(ACCENT_HI, Color32::from_rgb(0xFF, 0xB0, 0x70), hover),
-            lerp(ACCENT_LO, ACCENT, hover),
+            lerp(ACCENT, MAGENTA, hover * 0.6),
+            lerp(ACCENT_LO, ACCENT, hover * 0.5),
         )
     };
     vertical_gradient(p, r, radius, top, bottom);
@@ -538,15 +547,11 @@ pub fn play_button(
         },
         Color32::from_white_alpha(if enabled { 14 } else { 6 }),
     );
-    let text_c = if enabled {
-        ON_ACCENT
-    } else {
-        Color32::from_rgb(0xE9, 0xD6, 0xC6)
-    };
+    let text_c = if enabled { ON_ACCENT } else { TEXT_SOFT };
     let detail_c = if enabled {
         ON_ACCENT.gamma_multiply(0.72)
     } else {
-        Color32::from_rgb(0xB8, 0xA8, 0x9A)
+        MUTED
     };
     let label_g = p.layout_no_wrap(label.to_owned(), bold(22.0), text_c);
     let detail_g = p.layout_no_wrap(detail.to_owned(), semibold(12.0), detail_c);

@@ -1,4 +1,4 @@
-//! `Kestrel.exe --self-check <report>`: verifies that a packaged executable
+//! `NightLauncher.exe --self-check <report>`: verifies that a packaged executable
 //! carries everything it needs, without opening a window. Exit code 0 = OK.
 
 use std::fmt::Write as _;
@@ -23,7 +23,7 @@ pub fn run(layout: &Layout, report_path: Option<&Path>) -> i32 {
     check(
         "version",
         Ok(format!(
-            "Kestrel {} for Minecraft {} / Forge {}",
+            "Night Launcher {} for Minecraft {} / Forge {}",
             kestrel_core::LAUNCHER_VERSION,
             kestrel_core::MC_VERSION,
             kestrel_core::FORGE_VERSION

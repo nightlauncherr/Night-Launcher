@@ -156,7 +156,7 @@ impl Updater {
             notes: "Automatic launcher updates.\n- New kill effects\n- Faster first launch\n- Bug fixes".into(),
             published: String::new(),
             asset: kestrel_core::update::manifest::Asset {
-                url: "https://github.com/demo/kestrel/releases/download/v0.2.0/Kestrel.exe".into(),
+                url: "https://github.com/demo/kestrel/releases/download/v0.2.0/NightLauncher.exe".into(),
                 sha256: "0".repeat(64),
                 size: 22_642_688,
             },
@@ -175,9 +175,9 @@ impl Updater {
                 State::Failed("downloaded file failed verification: checksum mismatch".into())
             }
             "fallback" => State::Fallback {
-                file: PathBuf::from(r"C:\Users\you\AppData\Local\Kestrel\app\Kestrel.exe"),
+                file: PathBuf::from(r"C:\Users\you\AppData\Local\Kestrel\app\NightLauncher.exe"),
                 reason:
-                    r"Windows does not allow Kestrel to change files in C:\Program Files\Kestrel."
+                    r"Windows does not allow Night Launcher to change files in C:\Program Files\Night Launcher."
                         .into(),
             },
             _ => State::Available,
@@ -233,7 +233,7 @@ impl Updater {
             .name("kestrel-update".into())
             .spawn(move || {
                 let r = std::env::current_exe()
-                    .map_err(|e| format!("cannot locate Kestrel.exe: {e}"))
+                    .map_err(|e| format!("cannot locate NightLauncher.exe: {e}"))
                     .and_then(|exe| {
                         let t = transport();
                         let env = UpdateEnv {
@@ -445,7 +445,7 @@ impl Updater {
             )
             .show(ctx, |ui| {
                 ui.set_width(460.0);
-                let title = if required { "A required Kestrel update is available" } else { "A Kestrel update is available" };
+                let title = if required { "A required Night Launcher update is available" } else { "A Night Launcher update is available" };
                 ui.label(RichText::new(title).font(theme::bold(21.0)).color(theme::TEXT));
                 ui.add_space(8.0);
                 egui::Grid::new("upd-versions").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
@@ -463,7 +463,7 @@ impl Updater {
                     ui.add_space(8.0);
                     ui.label(RichText::new("What's new").family(theme::semibold_family()).strong());
                     egui::Frame::NONE
-                        .fill(Color32::from_rgb(0x18, 0x1A, 0x1E))
+                        .fill(theme::BG2)
                         .corner_radius(CornerRadius::same(6))
                         .inner_margin(8.0)
                         .show(ui, |ui| {
@@ -477,7 +477,7 @@ impl Updater {
                     State::Available | State::UpToDate { .. } | State::CheckFailed(_) | State::Idle | State::Checking | State::NotConfigured => {
                         if launcher_busy {
                             ui.label(
-                                RichText::new("Close Minecraft and let Kestrel finish what it is doing before updating.")
+                                RichText::new("Close Minecraft and let Night Launcher finish what it is doing before updating.")
                                     .color(WARN),
                             );
                         }
@@ -496,7 +496,7 @@ impl Updater {
                             );
                         }
                         ui.label(
-                            RichText::new("Your settings, game files and cosmetics are kept. Kestrel restarts when the update is done.")
+                            RichText::new("Your settings, game files and cosmetics are kept. Night Launcher restarts when the update is done.")
                                 .small()
                                 .color(MUTED),
                         );
@@ -509,7 +509,7 @@ impl Updater {
                             }
                             Stage::Verifying => ("Verifying signature, checksum and running the new version's self-test…".into(), None),
                             Stage::Installing => ("Installing…".into(), None),
-                            Stage::Restarting => ("Restarting Kestrel…".into(), None),
+                            Stage::Restarting => ("Restarting Night Launcher…".into(), None),
                         };
                         ui.label(label);
                         theme::progress_bar(ui, frac, 460.0);
@@ -542,10 +542,10 @@ impl Updater {
                         });
                     }
                     State::Fallback { file, reason } => {
-                        ui.label(RichText::new("Kestrel can't update itself in its current folder.").color(WARN).family(theme::semibold_family()).strong());
+                        ui.label(RichText::new("Night Launcher can't update itself in its current folder.").color(WARN).family(theme::semibold_family()).strong());
                         ui.label(reason);
                         ui.label(format!(
-                            "The verified new version was installed to:\n{}\n\nStart it from there (it keeps updating itself), or move Kestrel.exe to a folder you own, such as your Desktop or Documents.",
+                            "The verified new version was installed to:\n{}\n\nStart it from there (it keeps updating itself), or move NightLauncher.exe to a folder you own, such as your Desktop or Documents.",
                             file.display()
                         ));
                         ui.horizontal(|ui| {
@@ -613,7 +613,7 @@ impl Updater {
             theme::card_title(
                 ui,
                 "Updates",
-                "Kestrel updates itself from signed GitHub releases.",
+                "Night Launcher updates itself from signed GitHub releases.",
             );
             egui::Grid::new("upd-settings")
                 .num_columns(2)
@@ -633,7 +633,7 @@ impl Updater {
                 });
             if self.source.is_err() {
                 ui.label(
-                    RichText::new("This copy of Kestrel was built without an update source, so it cannot update itself. See documentation/UPDATES.md.")
+                    RichText::new("This copy of Night Launcher was built without an update source, so it cannot update itself. See documentation/UPDATES.md.")
                         .small()
                         .color(MUTED),
                 );
@@ -642,7 +642,7 @@ impl Updater {
             if ui
                 .checkbox(
                     &mut cfg.update_auto_check,
-                    "Show new versions automatically when Kestrel starts",
+                    "Show new versions automatically when Night Launcher starts",
                 )
                 .on_hover_text("Required updates are always checked for and shown, because Minecraft can't be started without them.")
                 .changed()
@@ -674,8 +674,10 @@ impl Updater {
                     }
                     State::UpToDate { latest } => {
                         ui.label(
-                            RichText::new(format!("Kestrel is up to date (latest: {latest})."))
-                                .color(OK),
+                            RichText::new(format!(
+                                "Night Launcher is up to date (latest: {latest})."
+                            ))
+                            .color(OK),
                         );
                     }
                     State::CheckFailed(e) => {
@@ -872,7 +874,7 @@ fn run_update(
             return Ok(Finish::Fallback {
                 file: target,
                 reason: format!(
-                    "Windows does not allow Kestrel to change files in {}.",
+                    "Windows does not allow Night Launcher to change files in {}.",
                     dir.display()
                 ),
             });
@@ -930,7 +932,7 @@ fn run_update(
 
 /// Where an update goes when the launcher's own folder is not writable.
 fn fallback_exe(layout: &Layout) -> PathBuf {
-    layout.root().join("app").join("Kestrel.exe")
+    layout.root().join("app").join("NightLauncher.exe")
 }
 
 /// Put a verified exe at `target`, replacing an earlier fallback copy safely.
@@ -1022,7 +1024,7 @@ pub fn on_startup(layout: &Layout, args: &[String]) -> Option<String> {
     updated_from.map(|from| {
         log::info!("updated from {from} to {}", kestrel_core::LAUNCHER_VERSION);
         format!(
-            "Kestrel was updated from {from} to {}.",
+            "Night Launcher was updated from {from} to {}.",
             kestrel_core::LAUNCHER_VERSION
         )
     })
@@ -1084,7 +1086,7 @@ mod tests {
         let evil = d.join("elsewhere");
         let args = |p: &Path| {
             vec![
-                "Kestrel.exe".into(),
+                "NightLauncher.exe".into(),
                 "--post-update".into(),
                 "0.1.0".into(),
                 "--update-health".into(),
@@ -1095,7 +1097,7 @@ mod tests {
         assert!(good.exists());
         on_startup(&layout, &args(&evil));
         assert!(!evil.exists());
-        assert!(on_startup(&layout, &["Kestrel.exe".into()]).is_none());
+        assert!(on_startup(&layout, &["NightLauncher.exe".into()]).is_none());
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -1168,7 +1170,7 @@ mod tests {
 
         const MANIFEST: &str =
             "https://github.com/o/kestrel/releases/latest/download/kestrel-update.json";
-        const EXE: &str = "https://github.com/o/kestrel/releases/download/v9.0.0/Kestrel.exe";
+        const EXE: &str = "https://github.com/o/kestrel/releases/download/v9.0.0/NightLauncher.exe";
 
         fn script(healthy: bool) -> Vec<u8> {
             let mut s = String::from("#!/bin/sh\n");
@@ -1198,7 +1200,7 @@ mod tests {
             std::fs::write(layout.launcher_config(), b"{\"max_ram_mib\":2048}").unwrap();
             let install_dir = dir.join("Desktop");
             std::fs::create_dir_all(&install_dir).unwrap();
-            let current = install_dir.join("Kestrel.exe");
+            let current = install_dir.join("NightLauncher.exe");
             std::fs::write(&current, b"OLD LAUNCHER").unwrap();
 
             let exe = script(healthy);

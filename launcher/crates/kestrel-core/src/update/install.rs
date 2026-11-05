@@ -3,11 +3,11 @@
 //! Windows will not let a running .exe be overwritten or deleted, but it
 //! does allow it to be *renamed*. So the swap is:
 //!
-//! 1. Copy the verified new exe next to the current one (`Kestrel.exe.new`).
-//! 2. Rename the running `Kestrel.exe` to `Kestrel.exe.old`.
-//! 3. Rename `Kestrel.exe.new` to `Kestrel.exe`.
+//! 1. Copy the verified new exe next to the current one (`NightLauncher.exe.new`).
+//! 2. Rename the running `NightLauncher.exe` to `NightLauncher.exe.old`.
+//! 3. Rename `NightLauncher.exe.new` to `NightLauncher.exe`.
 //! 4. Start the new exe and wait for it to report a healthy start.
-//! 5. The new exe deletes `Kestrel.exe.old` once the old process has exited.
+//! 5. The new exe deletes `NightLauncher.exe.old` once the old process has exited.
 //!
 //! If step 3 fails, step 2 is undone. If the new exe exits without reporting
 //! health, the old exe is renamed back ([`rollback`]). At no point is the only
@@ -210,7 +210,12 @@ pub fn clean_updates_dir(updates_dir: &Path, keep: Option<&Path>) {
         }
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
         // Only files this module creates.
-        if name.starts_with("Kestrel-") || name.starts_with("health-") || name.ends_with(".part") {
+        // "Kestrel-" covers leftovers from Kestrel builds sharing this data folder.
+        if name.starts_with("NightLauncher-")
+            || name.starts_with("Kestrel-")
+            || name.starts_with("health-")
+            || name.ends_with(".part")
+        {
             let _ = std::fs::remove_file(&p);
         }
     }
@@ -242,9 +247,9 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let install = d.path().join("Desktop");
         std::fs::create_dir_all(&install).unwrap();
-        let current = install.join("Kestrel.exe");
+        let current = install.join("NightLauncher.exe");
         std::fs::write(&current, b"OLD VERSION").unwrap();
-        let new = d.path().join("Kestrel-0.2.0.exe");
+        let new = d.path().join("NightLauncher-0.2.0.exe");
         std::fs::write(&new, b"NEW VERSION").unwrap();
         (d, current, new)
     }
@@ -258,14 +263,16 @@ mod tests {
         assert!(!staged_path(&current).exists());
         let updates = d.path().join("updates");
         std::fs::create_dir_all(&updates).unwrap();
-        std::fs::write(updates.join("Kestrel-0.2.0.exe"), b"x").unwrap();
+        std::fs::write(updates.join("NightLauncher-0.2.0.exe"), b"x").unwrap();
+        std::fs::write(updates.join("Kestrel-0.1.9.exe"), b"x").unwrap();
         std::fs::write(updates.join("unrelated.txt"), b"keep").unwrap();
         let marker = updates.join("health-0.2.0");
         std::fs::write(&marker, b"ok").unwrap();
         std::fs::write(updates.join("health-0.1.9"), b"stale").unwrap();
         cleanup_after_update(&current, &updates, Some(&marker), Duration::from_millis(10));
         assert!(!backup.exists());
-        assert!(!updates.join("Kestrel-0.2.0.exe").exists());
+        assert!(!updates.join("NightLauncher-0.2.0.exe").exists());
+        assert!(!updates.join("Kestrel-0.1.9.exe").exists());
         assert!(
             marker.exists(),
             "the marker the old launcher waits for is kept"
@@ -332,7 +339,7 @@ mod tests {
     #[test]
     fn windows_can_swap_a_running_exe() {
         let d = tempfile::tempdir().unwrap();
-        let current = d.path().join("Kestrel.exe");
+        let current = d.path().join("NightLauncher.exe");
         let sys = std::env::var_os("SystemRoot")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(r"C:\Windows"));

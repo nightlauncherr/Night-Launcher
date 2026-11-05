@@ -332,7 +332,7 @@ pub fn install(
     };
 
     // 9. Client mod.
-    progress.stage("Installing Kestrel client mod", 0);
+    progress.stage("Installing the Night client mod", 0);
     let (mod_jar, mod_sha1) = install_mod(layout, opts.mod_jar.as_deref())?;
 
     // Classpath: libraries (non-native) then the client jar, as vanilla does.

@@ -75,7 +75,7 @@ pub fn validate_client_id(raw: &str) -> Result<String> {
         .find(|(known, _)| *known == lower)
     {
         return Err(Error::Auth(format!(
-            "{id} is the application ID of {what}, shown in Microsoft error pages. It is not your Kestrel app registration. Use the Application (client) ID from your own app registration's Overview page."
+            "{id} is the application ID of {what}, shown in Microsoft error pages. It is not your own app registration. Use the Application (client) ID from your own app registration's Overview page."
         )));
     }
     Ok(lower)
@@ -195,7 +195,7 @@ impl Authenticator {
         let agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(30)))
-            .user_agent(format!("Kestrel-Launcher/{}", crate::LAUNCHER_VERSION))
+            .user_agent(format!("Night-Launcher/{}", crate::LAUNCHER_VERSION))
             .build()
             .into();
         Ok(Authenticator {

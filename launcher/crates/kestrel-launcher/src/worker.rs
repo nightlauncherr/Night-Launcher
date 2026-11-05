@@ -124,7 +124,7 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
         };
         // A launcher update may ship a newer client mod; refresh just that.
         if !mod_up_to_date(&layout, &state) {
-            progress.stage("Updating Kestrel client mod", 0);
+            progress.stage("Updating the Night client mod", 0);
             let (jar, sha) = install::install_mod(&layout, bundled_mod(&layout).as_deref())?;
             state.mod_jar = jar;
             state.mod_sha1 = sha;
