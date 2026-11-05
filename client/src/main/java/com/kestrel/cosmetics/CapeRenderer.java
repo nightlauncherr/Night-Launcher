@@ -44,7 +44,7 @@ public final class CapeRenderer {
                 ? client.capes().currentTexture()
                 : client.capes().assignedTexture(player.getUniqueID());
         if (tex == null) return; // disabled or nothing to draw: no GL work at all
-        if (player.isInvisible() || !player.isWearing(EnumPlayerModelParts.CAPE)) return;
+        if (player.isInvisible() || !wearsCape(player, mc)) return;
         if (player.getLocationCape() != null) return;
 
         float pt = event.partialRenderTick;
@@ -104,6 +104,18 @@ public final class CapeRenderer {
         if (c == null || c.capes() == null) return false;
         Minecraft mc = Minecraft.getMinecraft();
         return player == mc.thePlayer && c.capes().currentTexture() != null;
+    }
+
+    /**
+     * Skin Customization's cape switch. For your own player the local setting
+     * is used: the entity flag is only what the server last echoed back, and
+     * after turning the cape off and on some servers never echo the change,
+     * which left your cape hidden until you rejoined. Other players: the flag
+     * their client sent, as vanilla does.
+     */
+    static boolean wearsCape(AbstractClientPlayer player, Minecraft mc) {
+        if (player == mc.thePlayer) return mc.gameSettings.getModelParts().contains(EnumPlayerModelParts.CAPE);
+        return player.isWearing(EnumPlayerModelParts.CAPE);
     }
 
     private static float interpolateRotation(float prev, float cur, float pt) {
