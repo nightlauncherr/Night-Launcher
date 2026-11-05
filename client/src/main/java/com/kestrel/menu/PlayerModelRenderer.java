@@ -13,7 +13,9 @@ import org.lwjgl.opengl.GL11;
 /**
  * Draws a posed player model (classic or slim, base layer plus every second
  * layer: hat, jacket, sleeves, trousers) with a skin texture in GUI space,
- * without needing a player entity. Used by the main menu and the Skin screen.
+ * without needing a player entity, optionally with a cape (the equipped Night
+ * cape, so the menus show what you wear in game). Used by the main menu and
+ * the Skin screen.
  *
  * <p>Restores the GL state it changes (depth, lighting, blend, cull, rescale
  * normal, lightmap unit, colour) so the GUI drawn afterwards is unaffected.
@@ -44,6 +46,16 @@ public final class PlayerModelRenderer {
      * per block (the model is two blocks tall).
      */
     public void draw(Minecraft mc, float cx, float feetY, float scale, ResourceLocation tex, boolean slimArms, Pose pose) {
+        draw(mc, cx, feetY, scale, tex, slimArms, pose, null);
+    }
+
+    /**
+     * As {@link #draw(Minecraft, float, float, float, ResourceLocation, boolean, Pose)}, plus
+     * {@code cape} (a cape texture, or null for none) hanging from the shoulders the way
+     * vanilla's LayerCape draws it, swung back a little while the body leans.
+     */
+    public void draw(Minecraft mc, float cx, float feetY, float scale, ResourceLocation tex, boolean slimArms, Pose pose,
+                     ResourceLocation cape) {
         ModelPlayer m = slimArms ? slim : classic;
         pose(m, pose);
 
@@ -88,6 +100,18 @@ public final class PlayerModelRenderer {
         m.bipedLeftArmwear.render(s);
         m.bipedRightLegwear.render(s);
         m.bipedLeftLegwear.render(s);
+
+        if (cape != null) {
+            // LayerCape (1.8.9): from the body origin, 2 px behind the back, tilted out, flipped to face back.
+            mc.getTextureManager().bindTexture(cape);
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(0.0F, 0.0F, 0.125F);
+            float swing = Math.min(40.0F, Math.abs((float) Math.toDegrees(pose.lean)) * 3.0F);
+            GlStateManager.rotate(6.0F + swing, 1.0F, 0.0F, 0.0F);
+            GlStateManager.rotate(180.0F, 0.0F, 1.0F, 0.0F);
+            m.renderCape(s);
+            GlStateManager.popMatrix();
+        }
 
         GlStateManager.disableBlend();
         GlStateManager.enableCull();

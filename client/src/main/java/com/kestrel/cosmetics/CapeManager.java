@@ -7,6 +7,7 @@ import com.kestrel.util.AsyncLoader;
 import com.kestrel.util.ImageValidation;
 import com.kestrel.util.TextureLoader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.player.EnumPlayerModelParts;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -279,6 +280,16 @@ public final class CapeManager {
     }
 
     // ---- what to draw -------------------------------------------------------
+
+    /**
+     * The equipped cape for menu previews of your own character: null when none
+     * is equipped, when it is still loading, or when the cape is switched off
+     * in Options > Skin Customization (then it is not shown in game either).
+     */
+    public ResourceLocation menuPreviewTexture() {
+        if (!Minecraft.getMinecraft().gameSettings.getModelParts().contains(EnumPlayerModelParts.CAPE)) return null;
+        return currentTexture();
+    }
 
     /** Current frame of the local player's selected cape, or null. */
     public ResourceLocation currentTexture() {

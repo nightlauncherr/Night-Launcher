@@ -116,6 +116,8 @@ pub struct CosmeticsPage {
     cape_filter: Filter,
     sky_filter: Filter,
     effect_filter: Filter,
+    /// Whether Minecraft's own cape switch is off (options.txt), and when it was last read.
+    cape_part_hidden: Option<(std::time::Instant, bool)>,
 }
 
 impl CosmeticsPage {
@@ -142,6 +144,7 @@ impl CosmeticsPage {
             cape_filter: Filter::default(),
             sky_filter: Filter::default(),
             effect_filter: Filter::default(),
+            cape_part_hidden: None,
         }
     }
 
@@ -257,6 +260,19 @@ impl CosmeticsPage {
     }
 
     /// Forget failed previews so they are tried again (e.g. after being offline).
+    /// Minecraft's own cape switch, re-read from options.txt at most every 2 s.
+    fn cape_switch_off(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        match self.cape_part_hidden {
+            Some((at, v)) if now.duration_since(at) < Duration::from_secs(2) => v,
+            _ => {
+                let v = cosmetics::cape_part_hidden(&self.layout.options_txt());
+                self.cape_part_hidden = Some((now, v));
+                v
+            }
+        }
+    }
+
     fn retry_failed_previews(&mut self) {
         for key in std::mem::take(&mut self.preview_errors).into_keys() {
             self.requested.remove(&key);
@@ -750,6 +766,16 @@ impl CosmeticsPage {
                     .small()
                     .color(MUTED),
             );
+            if self.cape_switch_off() {
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(
+                        "Capes are switched off in Minecraft (Options > Skin Customization > Cape: OFF), \
+                         so no cape is shown on your player, not even an equipped one. Turn it back on in game.",
+                    )
+                    .color(WARN),
+                );
+            }
         });
         ui.add_space(10.0);
 

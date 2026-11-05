@@ -512,7 +512,7 @@ public final class SkinScreen extends GuiScreen implements FullFrameRateScreen {
             pose.rightArmZ = 0.045f + 0.025f * breath;
             pose.leftArmZ = -pose.rightArmZ;
             pose.bob = 0.006f * (breath + 1f);
-            renderer.draw(mc, charX, feetY, charScale, tex, slim, pose);
+            renderer.draw(mc, charX, feetY, charScale, tex, slim, pose, client.capes().menuPreviewTexture());
         } else {
             String l = "Loading...";
             fontRendererObj.drawString(l, Math.round(charX - fontRendererObj.getStringWidth(l) / 2f), Math.round(feetY - charScale), Theme.MUTED, false);

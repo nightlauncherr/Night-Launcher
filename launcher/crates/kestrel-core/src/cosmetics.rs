@@ -878,6 +878,29 @@ pub fn request_path(layout: &Layout) -> PathBuf {
     layout.client_data().join("launcher-cosmetics.json")
 }
 
+/// Whether Minecraft's own cape switch (Options → Skin Customization → Cape)
+/// is off in the game's `options.txt` (`modelPart_cape:false`). It hides every
+/// cape on your player, Night's included. A missing or unreadable file, or no
+/// such line, means the cape is shown (Minecraft's default).
+pub fn cape_part_hidden(options_txt: &Path) -> bool {
+    // options.txt is a few KB; refuse to read anything absurd.
+    match std::fs::metadata(options_txt) {
+        Ok(m) if m.len() <= 1024 * 1024 => {}
+        _ => return false,
+    }
+    match std::fs::read_to_string(options_txt) {
+        Ok(text) => options_hide_cape(&text),
+        Err(_) => false,
+    }
+}
+
+fn options_hide_cape(text: &str) -> bool {
+    text.lines()
+        .rev()
+        .find_map(|l| l.trim().strip_prefix("modelPart_cape:"))
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("false"))
+}
+
 pub fn capes_dir(layout: &Layout) -> PathBuf {
     layout.client_data().join("capes")
 }
@@ -1465,6 +1488,26 @@ fn downscale(img: &Rgba, max_w: u32) -> Rgba {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cape_part_switch_is_read_from_options_txt() {
+        assert!(options_hide_cape(
+            "fov:0.0\nmodelPart_cape:false\nmodelPart_hat:true\n"
+        ));
+        assert!(options_hide_cape("modelPart_cape:FALSE\r\n"));
+        assert!(!options_hide_cape("modelPart_cape:true\n"));
+        assert!(!options_hide_cape("fov:0.0\n"));
+        assert!(!options_hide_cape(""));
+        // The last line wins, as when Minecraft reads the file.
+        assert!(!options_hide_cape(
+            "modelPart_cape:false\nmodelPart_cape:true\n"
+        ));
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("options.txt");
+        assert!(!cape_part_hidden(&f), "missing file: cape shown");
+        std::fs::write(&f, "modelPart_cape:false\n").unwrap();
+        assert!(cape_part_hidden(&f));
+    }
+
     use super::*;
 
     fn png_bytes(w: u32, h: u32) -> Vec<u8> {

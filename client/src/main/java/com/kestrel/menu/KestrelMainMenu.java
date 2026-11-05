@@ -455,7 +455,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             tex = AccountSkin.texture();
             slim = AccountSkin.slim();
         }
-        renderer.draw(mc, x, feetY, charScale, tex, slim, pose);
+        renderer.draw(mc, x, feetY, charScale, tex, slim, pose, client.capes().menuPreviewTexture());
 
         // Name tag above the head, like in game.
         String name = mc.getSession().getUsername();
