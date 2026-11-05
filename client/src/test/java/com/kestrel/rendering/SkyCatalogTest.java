@@ -87,5 +87,6 @@ public class SkyCatalogTest {
     public void categoryLabels() {
         assertEquals("Clouds & Aurora", SkyCatalog.categoryLabel("atmospheric"));
         assertEquals("Space", SkyCatalog.categoryLabel("space"));
+        assertEquals("Night", SkyCatalog.categoryLabel("kestrel"));
     }
 }

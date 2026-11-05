@@ -67,6 +67,7 @@ public final class SkyCatalog {
         if ("atmospheric".equals(category)) return "Clouds & Aurora";
         if ("sunsets".equals(category)) return "Sunsets";
         if ("blocky".equals(category)) return "Blocky";
+        if ("kestrel".equals(category)) return "Night"; // id kept for saved settings
         return Character.toUpperCase(category.charAt(0)) + category.substring(1);
     }
 
