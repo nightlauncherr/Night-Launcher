@@ -363,9 +363,9 @@ def d_carbon(u, v, H, W):
 
 STATIC = [
     # id, name, category, design
-    ("kestrel_classic", "Kestrel Classic", "kestrel", d_kestrel_classic),
-    ("kestrel_gold", "Kestrel Gold", "kestrel", d_kestrel_gold),
-    ("kestrel_stealth", "Kestrel Stealth", "kestrel", d_kestrel_stealth),
+    ("kestrel_classic", "Night Classic", "kestrel", d_kestrel_classic),
+    ("kestrel_gold", "Night Gold", "kestrel", d_kestrel_gold),
+    ("kestrel_stealth", "Night Stealth", "kestrel", d_kestrel_stealth),
     ("onyx", "Onyx", "static", d_onyx),
     ("ivory", "Ivory", "static", d_ivory),
     ("sunset_fade", "Sunset Fade", "static", d_sunset),
@@ -531,7 +531,7 @@ ANIMATED = [
     ("kaleidoscope", "Kaleidoscope", "animated", 12, a_kaleido),
     ("aurora_flow", "Aurora Flow", "animated", 12, a_aurora_flow),
     ("lava_lamp", "Lava Lamp", "special", 12, a_lava_lamp),
-    ("kestrel_pulse", "Kestrel Pulse", "kestrel", 15, a_kestrel_pulse),
+    ("kestrel_pulse", "Night Pulse", "kestrel", 15, a_kestrel_pulse),
 ]
 ANIM_FRAMES = 24
 STATIC_SCALE = 4
@@ -885,7 +885,7 @@ SKIES = [
     ("void_realm", "Void Realm", "blocky", s_end_void),
     ("ember_haze", "Ember Haze", "blocky", s_nether_haze),
     ("blocky_noon", "Blocky Noon", "blocky", s_blocky_noon),
-    ("kestrel_ember", "Kestrel Ember", "kestrel", s_kestrel_ember),
+    ("kestrel_ember", "Night Ember", "kestrel", s_kestrel_ember),
 ]
 OLD_SKIES = [("dusk", "Dusk", "sunsets"), ("starry", "Starry Night", "space"), ("nebula", "Nebula", "space")]
 SKY_FACE = 512

@@ -1,8 +1,8 @@
 [
   {
     "modid": "${modid}",
-    "name": "Kestrel",
-    "description": "Kestrel PvP client: HUD, cosmetics, skies, kill effects and performance presets.",
+    "name": "Night",
+    "description": "Night PvP client (Night Launcher): HUD, cosmetics, skies, kill effects and performance presets.",
     "version": "${version}",
     "mcversion": "${mcversion}",
     "url": "",

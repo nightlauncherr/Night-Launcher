@@ -54,7 +54,7 @@ public enum KillEffectType {
     KESTREL_TALON("kestrel_talon", "Kestrel talon", Category.ADVANCED, "mob.bat.takeoff", 1.1f, false);
 
     public enum Category {
-        CLASSIC("Classic"), ELEMENTAL("Elemental"), MAGIC("Magic"), CELEBRATION("Celebration"), KESTREL("Kestrel"),
+        CLASSIC("Classic"), ELEMENTAL("Elemental"), MAGIC("Magic"), CELEBRATION("Celebration"), KESTREL("Signature"),
         ADVANCED("3D");
 
         public final String label;

@@ -130,8 +130,8 @@ public final class ClientSettingsScreen extends GuiScreen {
         ClientConfig c = cfg();
         switch (category) {
             case GENERAL:
-                header("Kestrel " + client.version());
-                text("Right Shift opens this menu (rebind under Controls > Kestrel). Settings save automatically.");
+                header("Night " + client.version());
+                text("Right Shift opens this menu (rebind under Controls > Night). Settings save automatically.");
                 content.add(new ActionButton("Edit HUD layout", true, client::openHudEditor));
                 header("Movement");
                 content.add(new Toggle("Toggle sprint", () -> c.sprint.toggleSprint, v -> {
@@ -140,7 +140,7 @@ public final class ClientSettingsScreen extends GuiScreen {
                 }));
                 text("Press your sprint key once to keep sprinting. Vanilla rules still apply (hunger, blindness, using items).");
                 header("Zoom & free look");
-                text("Hold C to zoom, hold Left Alt to look around without turning. Rebind both under Controls > Kestrel.");
+                text("Hold C to zoom, hold Left Alt to look around without turning. Rebind both under Controls > Night.");
                 content.add(new Slider("Zoom strength", 1.5f, 10f, 0.5f, () -> c.zoom.factor, v -> {
                     c.zoom.factor = v;
                     changed();
@@ -266,13 +266,13 @@ public final class ClientSettingsScreen extends GuiScreen {
                     capeItems.add(new TileGrid.Item(o.id, o.name, o.category, o.animated ? "ANIM" : null));
                 }
                 content.add(new TileGrid(capeItems, list2("static", "Static", "animated", "Animated", "special", "Special",
-                        "kestrel", "Kestrel", "mojang", "Mojang", "custom", "Custom"), () -> co.cape, v -> {
+                        "kestrel", "Night", "mojang", "Mojang", "custom", "Custom"), () -> co.cape, v -> {
                     co.cape = v;
                     if (!CapeManager.NONE.equals(v)) co.capesEnabled = true;
                     changed();
                 }, (mc2, it, x, y, w, h) -> drawCapeThumb(mc2, capeOpts.get(it.id), x, y, w, h), CAPE_FILTER, 40, 64));
                 text("Mojang: historical Mojang capes (MINECON 2011-2016, Mojang staff, Mojira, Realms, ...), shown by your "
-                        + "Kestrel client only. They do not grant or change any account cape. The original textures are "
+                        + "Night client only. They do not grant or change any account cape. The original textures are "
                         + "downloaded from Mojang's texture server the first time and kept on your PC.");
                 content.add(new Toggle("Animate capes", () -> co.animatedCapes, v -> {
                     co.animatedCapes = v;
@@ -456,7 +456,7 @@ public final class ClientSettingsScreen extends GuiScreen {
             changed();
         }));
         content.add(styleChoice("Sword style", () -> an.swordStyle, v -> an.swordStyle = v));
-        content.add(new Toggle("Slash trail (Kestrel slash)", () -> an.trail, v -> {
+        content.add(new Toggle("Slash trail (Night slash)", () -> an.trail, v -> {
             an.trail = v;
             changed();
         }));
@@ -464,7 +464,7 @@ public final class ClientSettingsScreen extends GuiScreen {
             an.trailItemColor = v;
             changed();
         }));
-        text("Kestrel slash: wind-up, a sweeping arc with a glowing trail, follow-through and a smooth return. "
+        text("Night slash: wind-up, a sweeping arc with a glowing trail, follow-through and a smooth return. "
                 + "Smooth: vanilla's motion with eased curves. Chop: an overhead strike.");
         header("Weapon & tool animations");
         content.add(new Toggle("Animate axes, pickaxes, shovels, hoes, rods", () -> an.toolsEnabled, v -> {
@@ -845,7 +845,7 @@ public final class ClientSettingsScreen extends GuiScreen {
     }
 
     private static void placeholder(Minecraft mc, String label, int x, int y, int w, int h) {
-        RenderUtil.rect(x, y, x + w, y + h, 0xFF16181D);
+        RenderUtil.rect(x, y, x + w, y + h, Theme.INSET);
         mc.fontRendererObj.drawString(label, x + (w - mc.fontRendererObj.getStringWidth(label)) / 2, y + (h - 8) / 2, Theme.MUTED, false);
     }
 
@@ -919,7 +919,7 @@ public final class ClientSettingsScreen extends GuiScreen {
 
     /** Effect tile: a small animated strip in the effect's colours. */
     private void drawEffectThumb(KillEffectType t, int x, int y, int w, int h) {
-        RenderUtil.rect(x, y, x + w, y + h, 0xFF101114);
+        RenderUtil.rect(x, y, x + w, y + h, Theme.INSET);
         int base;
         if (t.usesColor) {
             base = cfg().killEffects.color | 0xFF000000;
@@ -968,7 +968,7 @@ public final class ClientSettingsScreen extends GuiScreen {
         RenderUtil.rect(0, 0, width, height, Theme.BACKDROP);
         RenderUtil.softRect(px, py, px + pw, py + ph, Theme.PANEL);
         RenderUtil.softRect(px, py, px + sideW, py + ph, Theme.SIDEBAR);
-        fontRendererObj.drawString("KESTREL", px + 8, py + 10, Theme.ACCENT, false);
+        fontRendererObj.drawString("NIGHT", px + 8, py + 10, Theme.ACCENT, false);
         fontRendererObj.drawString(category.label, contentX, py + 10, Theme.TEXT, false);
         String preset = "Preset: " + (Preset.byId(cfg().activePreset) != null ? Preset.byId(cfg().activePreset).label : "-");
         fontRendererObj.drawString(preset, px + pw - fontRendererObj.getStringWidth(preset) - 10, py + 10, Theme.MUTED, false);

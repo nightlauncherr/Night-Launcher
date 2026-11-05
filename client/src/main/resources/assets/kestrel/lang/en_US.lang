@@ -1,0 +1,4 @@
+# Display names only: options.txt keeps the original key names, so existing
+# rebinds carry over.
+Kestrel=Night
+Open Kestrel menu=Open Night menu

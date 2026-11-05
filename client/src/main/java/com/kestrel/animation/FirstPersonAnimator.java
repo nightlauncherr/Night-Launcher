@@ -34,8 +34,8 @@ import java.util.Map;
  * vanilla's animations (with an eased item switch).
  */
 public final class FirstPersonAnimator {
-    /** Kestrel accent (trail colour when not taken from the item). */
-    private static final int ACCENT = 0xFFE8833A;
+    /** Night accent (trail colour when not taken from the item). */
+    private static final int ACCENT = com.kestrel.gui.Theme.ACCENT;
     /** Trail length in normalised swing time. */
     private static final float TRAIL_SPAN = 0.22f;
     private static final int TRAIL_SAMPLES = 28;

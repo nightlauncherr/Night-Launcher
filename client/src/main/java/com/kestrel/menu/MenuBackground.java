@@ -7,11 +7,12 @@ import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import org.lwjgl.opengl.GL11;
 
 /**
- * Kestrel's menu backdrop: a dark graphite gradient with a soft vignette, a
- * faint warm light behind the character, and a column of slowly flowing
- * silk-like ribbons on the right with a few drifting sparkles. Drawn with
- * plain coloured geometry (no textures), allocation-free, and it puts back
- * the GL state it changes.
+ * Night's menu backdrop, the same purple nebula as the launcher: a deep violet
+ * gradient with soft purple and magenta clouds, faint stars, a purple light
+ * behind the character, a soft vignette, and a column of slowly flowing
+ * lavender ribbons on the right with a few drifting sparkles. Drawn with plain
+ * coloured geometry (no textures), allocation-free, and it puts back the GL
+ * state it changes.
  *
  * <p>Per frame: each ribbon's centre line is evaluated once and shared by its
  * fill and its highlight, all ribbons go out in one draw call and all sparkles
@@ -22,6 +23,7 @@ public final class MenuBackground {
     private static final int RIBBONS = 7;
     private static final int STEPS = 48;
     private static final int SPARKS = 12;
+    private static final int STARS = 70;
     private static final float[] SPARK_DX = {0f, 1f, 0f, -1f};
     private static final float[] SPARK_DY = {-1f, 0f, 1f, 0f};
     /** The vertical part of each centre-line phase, which never changes. */
@@ -90,18 +92,27 @@ public final class MenuBackground {
         shadeSynced = false; // first thing each frame: force the real shade-model call once
         begin();
 
-        // Base gradient: lighter graphite at the top left, near black at the bottom right.
+        // Base gradient: deep violet at the top left, midnight at the bottom right.
         wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
-        v(wr, w, 0, 0x23262C, 1f);
-        v(wr, 0, 0, 0x2A2D33, 1f);
-        v(wr, 0, h, 0x15171A, 1f);
-        v(wr, w, h, 0x0E0F12, 1f);
+        v(wr, w, 0, 0x120B20, 1f);
+        v(wr, 0, 0, 0x1A102B, 1f);
+        v(wr, 0, h, 0x120B20, 1f);
+        v(wr, w, h, 0x0B0714, 1f);
         t.draw();
 
-        // Warm light behind the character (Kestrel orange, very low).
-        radial(wr, t, glowX, glowY, glowR, 0xE8833A, 0.10f, 40);
-        // Cool soft light upper left behind the logo.
-        radial(wr, t, w * 0.16f, h * 0.30f, Math.max(w, h) * 0.45f, 0x8FA6C8, 0.05f, 40);
+        // Nebula clouds: a few very soft purple and magenta lights drifting slowly.
+        float big = Math.max(w, h);
+        radial(wr, t, w * (0.30f + 0.02f * (float) Math.sin(time * 0.021f)),
+                h * (0.34f + 0.02f * (float) Math.cos(time * 0.016f)), big * 0.55f, 0x8652D9, 0.11f, 40);
+        radial(wr, t, w * (0.78f + 0.02f * (float) Math.cos(time * 0.018f)),
+                h * (0.76f + 0.02f * (float) Math.sin(time * 0.013f)), big * 0.40f, 0xC05AE8, 0.07f, 40);
+        radial(wr, t, w * 0.55f, h * 0.10f, big * 0.30f, 0xA16BEF, 0.05f, 32);
+        stars(wr, t, w, h, time);
+
+        // Purple light behind the character.
+        radial(wr, t, glowX, glowY, glowR, 0x8652D9, 0.16f, 40);
+        // Soft lavender light upper left behind the logo.
+        radial(wr, t, w * 0.16f, h * 0.30f, big * 0.45f, 0xC6A4FF, 0.05f, 40);
 
         // Ribbons: each a band whose centre line sways; the fill is light on the leading edge and
         // fades across, which reads as folded silk.
@@ -126,10 +137,10 @@ public final class MenuBackground {
                     float y0 = h * i / (float) STEPS;
                     float y1 = h * (i + 1) / (float) STEPS;
                     float c0 = CENTRE[i], c1 = CENTRE[i + 1];
-                    v(wr, c0 - half, y0, 0xF2F4F8, alpha);
-                    v(wr, c0 + half, y0, 0xB9BEC8, 0f);
-                    v(wr, c1 + half, y1, 0xB9BEC8, 0f);
-                    v(wr, c1 - half, y1, 0xF2F4F8, alpha);
+                    v(wr, c0 - half, y0, 0xE6DCFF, alpha);
+                    v(wr, c0 + half, y0, 0xA16BEF, 0f);
+                    v(wr, c1 + half, y1, 0xA16BEF, 0f);
+                    v(wr, c1 - half, y1, 0xE6DCFF, alpha);
                 }
                 // A thin highlight along the leading edge.
                 for (int i = 0; i < STEPS; i++) {
@@ -166,6 +177,26 @@ public final class MenuBackground {
 
     private static float frac(float v) {
         return v - (float) Math.floor(v);
+    }
+
+    /** Faint fixed stars (positions from a hash, so they never move); a few twinkle. One draw call. */
+    private static void stars(WorldRenderer wr, Tessellator t, int w, int h, float time) {
+        wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
+        for (int s = 0; s < STARS; s++) {
+            float fx = frac((float) Math.sin(s * 12.9898f + 3.1f) * 43758.545f);
+            float fy = frac((float) Math.sin(s * 78.233f + 1.7f) * 24634.634f);
+            float fb = frac((float) Math.sin(s * 39.425f) * 15731.743f);
+            float x = w * fx;
+            float y = h * fy;
+            float a = 0.18f + 0.30f * fb;
+            if (s % 7 == 0) a *= 0.6f + 0.4f * (float) Math.sin(time * (0.8f + 0.2f * (s % 3)) + s);
+            float r = s % 11 == 0 ? 1.0f : 0.5f;
+            v(wr, x + r, y - r, 0xE6DCFF, a);
+            v(wr, x - r, y - r, 0xE6DCFF, a);
+            v(wr, x - r, y + r, 0xE6DCFF, a);
+            v(wr, x + r, y + r, 0xE6DCFF, a);
+        }
+        t.draw();
     }
 
     /** Soft round light: centre alpha a, fading to nothing at radius r. */

@@ -14,7 +14,7 @@ public enum SwingStyle {
     /** Minecraft's motion, but timed in real time and eased so it never jerks at the start. */
     SMOOTH("smooth", "Smooth"),
     /** Kestrel's slash: wind-up, sweeping arc, follow-through, glowing trail. */
-    KESTREL("kestrel", "Kestrel slash"),
+    KESTREL("kestrel", "Night slash"),
     /** A heavier overhead chop (wind-up high, strike down), suited to axes and tools. */
     CHOP("chop", "Chop");
 

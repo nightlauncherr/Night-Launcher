@@ -63,7 +63,7 @@ You can run the self-check yourself: `NightLauncher.exe --self-check report.txt`
 ## First launch
 
 1. Start `NightLauncher.exe`. Data goes to `%LOCALAPPDATA%\Kestrel` (override with
-   `NightLauncher.exe --root D:\Games\Night Launcher` or `%KESTREL_HOME%`).
+   `NightLauncher.exe --root D:\Games\NightLauncher` or `%KESTREL_HOME%`).
 2. **Offline mode** works immediately for singleplayer and offline-mode servers.
 3. Press **Play**. The first run downloads a few hundred MB (Minecraft, libraries, assets, Forge,
    Mojang's Java 8 runtime), verifying SHA-1 hashes where Mojang/Forge publish them.

@@ -25,7 +25,7 @@ import java.io.IOException;
 /**
  * Kestrel's main menu, shown instead of Minecraft's (see {@link MenuReplacer}).
  *
- * <p>Layout: the Kestrel mark and a text navigation column on the left; on the
+ * <p>Layout: the Night mark and a text navigation column on the left; on the
  * right, flowing ribbons and the player's own skin as a 3D character standing
  * above the SKIN button. On the first open of a session a short "click to
  * enter" splash comes first. Each time the menu opens from elsewhere the
@@ -45,7 +45,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private static boolean splashDone;
 
     private static final String[] LABELS = {
-            "Singleplayer", "Multiplayer", "Realms", "Mods", "Minecraft Settings", "Kestrel Settings", "Quit Game"};
+            "Singleplayer", "Multiplayer", "Realms", "Mods", "Minecraft Settings", "Night Settings", "Quit Game"};
     private static final int SINGLE = 0, MULTI = 1, REALMS = 2, MODS = 3, OPTIONS = 4, KESTREL = 5, QUIT = 6;
     private static final float LEAVE_SECONDS = 0.16f;
 
@@ -118,7 +118,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         skinX = Math.round(charX - skinW / 2f);
         skinY = Math.round(feetY + Math.max(8f, charScale * 0.12f));
         if (skinY + skinH > h - 18) skinY = h - 18 - skinH;
-        footerLeft = "Kestrel " + client.version();
+        footerLeft = "Night " + client.version();
         footerLeftWidth = fontRendererObj.getStringWidth(footerLeft);
         footerRightWidth = fontRendererObj.getStringWidth(FOOTER_RIGHT);
     }
@@ -297,7 +297,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
 
         if (leaving >= 0) {
             float l = secs(leaveNanos, now) / LEAVE_SECONDS;
-            MenuBackground.gradientRect(0, 0, width, height, 0x08090B, clamp01(l), clamp01(l));
+            MenuBackground.gradientRect(0, 0, width, height, 0x0B0714, clamp01(l), clamp01(l));
             if (l >= 1f) {
                 int target = leaving;
                 leaving = -1;
@@ -305,11 +305,11 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             }
         } else {
             float fadeIn = 1f - clamp01(time / 0.35f);
-            if (fadeIn > 0f) MenuBackground.gradientRect(0, 0, width, height, 0x08090B, fadeIn, fadeIn);
+            if (fadeIn > 0f) MenuBackground.gradientRect(0, 0, width, height, 0x0B0714, fadeIn, fadeIn);
         }
     }
 
-    /** Kestrel mark plus the wordmark: centred and large on the splash, then it settles top left. */
+    /** Night mark plus the wordmark: centred and large on the splash, then it settles top left. */
     private void drawMark(boolean splash, float time, float e) {
         float move = splash ? 0f : (withSplash ? easeInOut(e / 0.7f) : 1f);
         float bigSize = clamp(height * 0.22f, 48f, 120f);
@@ -325,7 +325,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         GlStateManager.enableBlend();
         GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
         // Soft glow behind the mark.
-        drawRadial(x + size / 2f, y + size / 2f, size * 1.1f, 0xE8833A, 0.12f * alpha);
+        drawRadial(x + size / 2f, y + size / 2f, size * 1.1f, 0x8652D9, 0.16f * alpha);
         GlStateManager.enableBlend();
         GlStateManager.color(1f, 1f, 1f, alpha);
         mc.getTextureManager().bindTexture(MARK);
@@ -346,7 +346,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
 
         // Wordmark: under the mark on the splash, beside it in the menu.
         float textScale = 2f;
-        String word = "KESTREL";
+        String word = "NIGHT";
         int ww = spacedWidth(word, 2);
         float splashTx = width / 2f - ww * textScale / 2f;
         float splashTy = sy + bigSize + 14f;
@@ -381,7 +381,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         // Thin divider under the wordmark.
         float lineIn = easeOut((e - 0.3f) / 0.5f);
         if (lineIn > 0f) {
-            MenuBackground.gradientRect(navX, navY - 12, navX + navW * 0.55f * lineIn, navY - 11, 0x6A7078, 0.5f, 0.5f);
+            MenuBackground.gradientRect(navX, navY - 12, navX + navW * 0.55f * lineIn, navY - 11, 0x4A3866, 0.5f, 0.5f);
         }
         for (int i = 0; i < LABELS.length; i++) {
             float in = easeOut((e - 0.35f - i * 0.06f) / 0.45f);
@@ -392,9 +392,9 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             float slide = (1f - in) * -16f + hv * 6f;
             // Accent bar grows in on hover.
             if (hv > 0.02f) {
-                MenuBackground.gradientRect(navX - 8, y - 1, navX - 6, y + 9, 0xE8833A, hv * in, hv * in);
+                MenuBackground.gradientRect(navX - 8, y - 1, navX - 6, y + 9, Theme.ACCENT & 0xFFFFFF, hv * in, hv * in);
             }
-            int base = i == QUIT ? 0xC9A0A0 : 0xC7CBD1;
+            int base = i == QUIT ? 0xD9A6B4 : 0xDDD2F0;
             int col = lerpRgb(base, i == QUIT ? 0xFF8A8A : 0xFFFFFF, hv);
             drawSpaced(LABELS[i], Math.round(navX + slide), y, argb(col, in), 1);
         }
@@ -475,10 +475,10 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             float lift = (1f - btnIn) * 6f;
             int bx = skinX;
             int by = Math.round(skinY + lift);
-            MenuBackground.gradientRect(bx, by, bx + skinW, by + skinH, lerpRgb(0x1E2126, 0xE8833A, skinHover),
+            MenuBackground.gradientRect(bx, by, bx + skinW, by + skinH, lerpRgb(0x25183B, 0x8652D9, skinHover),
                     0.85f * btnIn, 0.85f * btnIn);
             // Thin outline.
-            int edge = argb(lerpRgb(0x6A7078, 0xF6B27A, skinHover), btnIn);
+            int edge = argb(lerpRgb(0x4A3866, 0xC6A4FF, skinHover), btnIn);
             Gui.drawRect(bx, by, bx + skinW, by + 1, edge);
             Gui.drawRect(bx, by + skinH - 1, bx + skinW, by + skinH, edge);
             Gui.drawRect(bx, by, bx + 1, by + skinH, edge);
@@ -492,11 +492,11 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private void drawFooter(float e) {
         float a = easeOut((e - 0.8f) / 0.6f) * 0.75f;
         if (a < 0.03f) return;
-        fontRendererObj.drawString(footerLeft, navX, height - 14, argb(0x7A808A, a), false);
+        fontRendererObj.drawString(footerLeft, navX, height - 14, argb(0x817391, a), false);
         int rw = footerRightWidth;
         // Only when there is room beside the version (narrow windows, big GUI scales).
         if (width - rw - 8 > navX + footerLeftWidth + 16) {
-            fontRendererObj.drawString(FOOTER_RIGHT, width - rw - 8, height - 14, argb(0x5E636B, a), false);
+            fontRendererObj.drawString(FOOTER_RIGHT, width - rw - 8, height - 14, argb(0x5E5270, a), false);
         }
     }
 

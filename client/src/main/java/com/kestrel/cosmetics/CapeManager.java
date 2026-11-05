@@ -508,7 +508,7 @@ public final class CapeManager {
         c.setConnectTimeout(MOJANG_TIMEOUT_MS);
         c.setReadTimeout(MOJANG_TIMEOUT_MS);
         c.setUseCaches(false);
-        c.setRequestProperty("User-Agent", "Kestrel");
+        c.setRequestProperty("User-Agent", "Night-Client");
         try {
             int code = c.getResponseCode();
             if (code != 200) throw new IOException("HTTP " + code + " from " + MojangCapes.HOST);

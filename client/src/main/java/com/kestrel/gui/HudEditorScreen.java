@@ -61,8 +61,8 @@ public final class HudEditorScreen extends GuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         RenderUtil.rect(0, 0, width, height, 0x50000000);
         // Centre guides (highlighted while snapping to them).
-        RenderUtil.rect(width / 2, 0, width / 2 + 1, height, snapV ? 0x90E8833A : 0x20FFFFFF);
-        RenderUtil.rect(0, height / 2, width, height / 2 + 1, snapH ? 0x90E8833A : 0x20FFFFFF);
+        RenderUtil.rect(width / 2, 0, width / 2 + 1, height, snapV ? 0x90A16BEF : 0x20FFFFFF);
+        RenderUtil.rect(0, height / 2, width, height / 2 + 1, snapH ? 0x90A16BEF : 0x20FFFFFF);
 
         ScaledResolution res = new ScaledResolution(mc);
         client.hud().renderAll(mc, res, true);

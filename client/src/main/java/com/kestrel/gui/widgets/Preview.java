@@ -20,7 +20,7 @@ public final class Preview extends Widget {
 
     @Override
     public void draw(Minecraft mc, int mx, int my) {
-        RenderUtil.softRect(x, y, x + w, y + h, 0xFF101114);
+        RenderUtil.softRect(x, y, x + w, y + h, Theme.INSET);
         RenderUtil.outline(x, y, x + w, y + h, Theme.TRACK);
         painter.paint(mc, x + w / 2, y + h / 2, w, h);
     }

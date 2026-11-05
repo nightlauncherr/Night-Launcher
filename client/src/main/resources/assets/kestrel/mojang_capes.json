@@ -1,5 +1,5 @@
 {
-  "_comment": "Historical Mojang capes as local Kestrel cosmetics. Only names and Mojang texture ids are shipped; the original textures are downloaded from Mojang's texture server (https://textures.minecraft.net/texture/<textureId>) on first use and cached in instance/kestrel/mojang-capes. Equipping one does not grant or change any account cape. See documentation/CAPES.md.",
+  "_comment": "Historical Mojang capes as local Night cosmetics. Only names and Mojang texture ids are shipped; the original textures are downloaded from Mojang's texture server (https://textures.minecraft.net/texture/<textureId>) on first use and cached in instance/kestrel/mojang-capes. Equipping one does not grant or change any account cape. See documentation/CAPES.md.",
   "capes": [
     {"id": "minecon_2011", "name": "MINECON 2011", "textureId": "953cac8b779fe41383e675ee2b86071a71658f2180f56fbce8aa315ea70e2ed6", "about": "MINECON 2011 attendees (red, creeper face)"},
     {"id": "minecon_2012", "name": "MINECON 2012", "textureId": "a2e8d97ec79100e90a75d369d1b3ba81273c4f82bc1b737e934eed4a854be1b6", "about": "MINECON 2012 attendees (blue, pickaxe)"},

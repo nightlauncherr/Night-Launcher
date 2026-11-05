@@ -224,7 +224,7 @@ public final class SkinUrl {
         c.setUseCaches(false);
         c.setConnectTimeout(TIMEOUT_MS);
         c.setReadTimeout(TIMEOUT_MS);
-        c.setRequestProperty("User-Agent", "Kestrel-Client");
+        c.setRequestProperty("User-Agent", "Night-Client");
         try {
             int code = c.getResponseCode();
             if (code != 200) throw new IOException("HTTP " + code + " from " + c.getURL().getHost());

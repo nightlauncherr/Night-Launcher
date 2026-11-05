@@ -53,19 +53,19 @@
     },
     {
       "id": "kestrel_classic",
-      "name": "Kestrel Classic",
+      "name": "Night Classic",
       "texture": "capes/kestrel_classic.png",
       "category": "kestrel"
     },
     {
       "id": "kestrel_gold",
-      "name": "Kestrel Gold",
+      "name": "Night Gold",
       "texture": "capes/kestrel_gold.png",
       "category": "kestrel"
     },
     {
       "id": "kestrel_stealth",
-      "name": "Kestrel Stealth",
+      "name": "Night Stealth",
       "texture": "capes/kestrel_stealth.png",
       "category": "kestrel"
     },
@@ -281,7 +281,7 @@
     },
     {
       "id": "kestrel_pulse",
-      "name": "Kestrel Pulse",
+      "name": "Night Pulse",
       "texture": "capes/kestrel_pulse.png",
       "category": "kestrel",
       "fps": 15

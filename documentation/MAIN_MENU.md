@@ -12,8 +12,10 @@ no vanilla code is patched and every path is covered.
 - **Navigation** (left column, plain text, accent bar and slide on hover): Singleplayer,
   Multiplayer, Realms, Mods (Forge), Minecraft Settings, Night Settings, Quit Game. Each
   opens the normal screen after a short fade; Back/Esc there returns to this menu.
-- **Background** (`MenuBackground`): graphite gradient, a faint warm light behind the
-  character, flowing ribbons on the right that slide in, a few drifting sparkles, vignette.
+- **Background** (`MenuBackground`): the launcher's purple nebula: a deep violet gradient,
+  soft purple and magenta clouds drifting very slowly, faint fixed stars, a purple light
+  behind the character, lavender ribbons on the right that slide in, a few drifting
+  sparkles, vignette.
   Coloured geometry only, no textures; allocation-free.
 - **Character**: your own skin (the applied Night skin, else your account skin, else
   Steve/Alex offline) as a 3D player model, classic or slim, with every second-layer part.

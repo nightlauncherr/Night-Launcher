@@ -23,7 +23,7 @@ Logs:
 | Sign-in: "does not own Minecraft: Java Edition" | The Microsoft account has no Java Edition licence |
 | Sign-in: XErr child/adult/region messages | Fix the account at xbox.com / Microsoft Family as the message says |
 | Game exits, "Night Launcher loaded" never appears | Check `latest.log` for the first exception. Try Repair. Remove other mods from `instance\mods` |
-| Cape not visible | "Show cape" is off, the cape layer is disabled in Options → Skin Customization (the in-game cape menu warns about this), or the cape failed to load (the menu shows "Last error"). Since 0.11.1 an equipped Night Launcher cape replaces your official cape on your own player |
+| Cape not visible | "Show cape" is off, the cape layer is disabled in Options → Skin Customization (the in-game cape menu warns about this), or the cape failed to load (the menu shows "Last error"). Since 0.11.1 an equipped Night cape replaces your official cape on your own player |
 | Custom cape/sky rejected | Night Launcher menu shows "Last error"; see size/format rules in the menu or SKIES.md |
 | Custom sky does nothing in Nether/End | By design: Overworld only |
 | No kill effects on a server | Detection needs you to have hit the victim recently and either a 0-health update or a kill-feed line naming both of you. Some servers do neither; try toggling detection modes |

@@ -25,7 +25,7 @@ public final class ActionButton extends Widget {
     @Override
     public void draw(Minecraft mc, int mx, int my) {
         boolean hov = enabled && isHovered(mx, my);
-        int bg = !enabled ? Theme.TRACK : primary ? (hov ? 0xFFF09A5A : Theme.ACCENT) : (hov ? Theme.CARD_HOVER : Theme.CARD);
+        int bg = !enabled ? Theme.TRACK : primary ? (hov ? Theme.ACCENT_HOVER : Theme.ACCENT) : (hov ? Theme.CARD_HOVER : Theme.CARD);
         RenderUtil.softRect(x, y, x + w, y + h, bg);
         if (!primary && hov) RenderUtil.outline(x, y, x + w, y + h, Theme.ACCENT_DIM);
         String s = fit(mc, label, w - 8);

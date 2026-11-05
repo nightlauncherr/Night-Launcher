@@ -136,7 +136,7 @@ public final class TileGrid extends Widget {
         }
         // Search box.
         int sy = y + searchY;
-        RenderUtil.softRect(x, sy, x + w, sy + SEARCH_H, 0xFF101114);
+        RenderUtil.softRect(x, sy, x + w, sy + SEARCH_H, Theme.INSET);
         RenderUtil.outline(x, sy, x + w, sy + SEARCH_H, searchFocused ? Theme.ACCENT : Theme.TRACK);
         String text = filter.search;
         boolean caret = searchFocused && (System.currentTimeMillis() / 500) % 2 == 0;
