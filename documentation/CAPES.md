@@ -49,21 +49,21 @@ keep working.
 
 ## Historical Mojang capes
 
-The **Mojang** category lists 12 historical Mojang capes as *local Kestrel cosmetics*: MINECON
+The **Mojang** category lists 12 historical Mojang capes as *local Night cosmetics*: MINECON
 2011, 2012, 2013, 2015 and 2016, Realms MapMaker, Crafter, Translator, Mojang (Classic) and
 Mojang (2015) (the first and second Mojang staff designs), Cobalt and Mojira Moderator.
 
-- Only your Kestrel client draws the one you equip. It does not grant or change any account
-  cape, nothing is sent to Mojang or to servers, and other players (vanilla or Kestrel) don't
-  see it. Like every Kestrel cape, it replaces your official cape on your own player while
+- Only your Night client draws the one you equip. It does not grant or change any account
+  cape, nothing is sent to Mojang or to servers, and other players (vanilla or Night) don't
+  see it. Like every Night cape, it replaces your official cape on your own player while
   equipped (see "Official capes" below).
-- Kestrel ships only their names and Mojang texture ids
+- Night ships only their names and Mojang texture ids
   (`client/src/main/resources/assets/kestrel/mojang_capes.json`), not Mojang's artwork. The
   original 64x32 textures are downloaded from Mojang's texture server
   (`https://textures.minecraft.net/texture/<id>`) the first time one is previewed or
   equipped, checked like an uploaded cape, and kept in `instance/kestrel/mojang-capes/`, so
   later launches work offline. The launcher downloads over HTTPS (Mojang hosts only,
-  no redirects, 64 KB cap). In game, if Java 8 cannot verify the HTTPS certificate, Kestrel
+  no redirects, 64 KB cap). In game, if Java 8 cannot verify the HTTPS certificate, Night
   falls back to HTTP from the same host, which is how vanilla 1.8.9 loads every cape; the
   file is validated either way.
 - Delete that folder to download them again. If you were offline, press **Rescan** on the
@@ -72,12 +72,12 @@ Mojang (2015) (the first and second Mojang staff designs), Cobalt and Mojira Mod
 ## Bundled designs
 
 `tools/gen_cosmetics.py` generates the bundled capes from code (no external art): 24 static
-designs (Kestrel Classic/Gold/Stealth, gradients, neon, geometric, elemental, pixel-art,
+designs (Night Classic/Gold/Stealth, gradients, neon, geometric, elemental, pixel-art,
 Galaxy, Obsidian Rune, Royal Crest, Carbon) at 4x (256x128) and 13 animated 24-frame
 strips at 2x (128x64 per frame) with their own frame rate (RGB Cycle/Wave, Plasma, Tidal
 Waves, Wildfire, Energy Core, Code Rain, Starfall, Pulse Rings, Kaleidoscope, Aurora Flow,
-Lava Lamp, Kestrel Pulse). It also writes every thumbnail and the catalog. Menus group capes
-by category (Static, Animated, Special, Kestrel, and Custom for your uploads), with a search
+Lava Lamp, Night Pulse). It also writes every thumbnail and the catalog. Menus group capes
+by category (Static, Animated, Special, Night, and Custom for your uploads), with a search
 box; animated capes are marked ANIMATED and their thumbnails play.
 
 ## Layouts
@@ -109,15 +109,15 @@ last drawn).
 ## Official capes
 
 Almost every Java account owns an official Minecraft cape (and Mojang now gives several
-away), so a Kestrel cape that yielded to it would never be seen. On **your own player** the
-Kestrel cape you equip therefore replaces your official cape: while it is equipped and
+away), so a Night cape that yielded to it would never be seen. On **your own player** the
+Night cape you equip therefore replaces your official cape: while it is equipped and
 loaded, `getLocationCape()` reports no official cape for the local player
-(`MixinAbstractClientPlayer` → `CapeRenderer.hidesOfficialCape`) and Kestrel's renderer
+(`MixinAbstractClientPlayer` → `CapeRenderer.hidesOfficialCape`) and Night's renderer
 draws the equipped one. While it is still loading, with **No cape**, or with "Show cape"
 off, your official cape shows as usual. Only your screen changes; other players still see
 your official cape. On other players, an official cape still wins over a catalog-assigned
-Kestrel cape. Minecraft's own Options → Skin Customization → Cape switch hides every cape,
-Kestrel's included; the in-game cape menu says so when it is off.
+Night cape. Minecraft's own Options → Skin Customization → Cape switch hides every cape,
+Night's included; the in-game cape menu says so when it is off.
 
 ## Restricted capes (`owners`)
 
@@ -130,15 +130,15 @@ Kestrel's included; the in-game cape menu says so when it is off.
   session UUID (`Minecraft.getSession().getPlayerID()`, from Microsoft sign-in) is an owner.
   This check runs at render time, so editing `config.json` or the launcher request file does
   not bypass it. The in-game list and the launcher only offer it to the owner.
-* **Other players:** Kestrel clients draw a restricted cape on the player whose UUID owns it
+* **Other players:** Night clients draw a restricted cape on the player whose UUID owns it
   (the UUID the server reports, authenticated by Mojang on online-mode servers). Players can
   hide their cape with Skin Customization → Cape, and viewers can turn this off with
   "Show players' assigned capes". On other players an official Minecraft cape always takes
   precedence.
 
-Limitations, honestly: there is no Kestrel server. The restriction is enforced by the
+Limitations, honestly: there is no Night server. The restriction is enforced by the
 signed client jar; anyone who modifies their own client could render any texture locally
-(only on their own screen). Other viewers see the assigned cape only if they run Kestrel,
+(only on their own screen). Other viewers see the assigned cape only if they run Night,
 and they see it whenever the owner is visible, because the owner's in-game cape choice is
 not transmitted. Nicked or offline-mode players are identified by whatever UUID the server
 gives them.
@@ -160,9 +160,9 @@ Researched October 2026:
    third-party client to fetch, display or own Lunar cosmetics.
 2. **Undocumented:** Lunar's cosmetics come from its private, authenticated services.
    Using them would mean impersonating Lunar Client or reusing its sessions, against its
-   terms and against Kestrel's rules (no token reuse, no entitlement bypass), so Kestrel
+   terms and against Night's rules (no token reuse, no entitlement bypass), so Night
    does not do it, and does not read Lunar's local files.
-3. **What Kestrel supports instead:** your own assets in its own renderer: PNG capes
+3. **What Night supports instead:** your own assets in its own renderer: PNG capes
    (vanilla/HD/animated strips) and GIF capes, via **Upload cape…** or the capes folder.
    This is not a Lunar integration, and the UI does not call it one. If Lunar ever
    publishes a client-side interoperability API, it can be added next to the catalog as a

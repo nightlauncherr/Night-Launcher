@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Sets the Kestrel version (launcher + client mod) in one step.
+  Sets the Night Launcher version (launcher + client mod) in one step.
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\bump-version.ps1 -Version 0.1.1
 #>

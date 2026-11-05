@@ -1,6 +1,6 @@
 # In-game QoL features (PvP and visuals)
 
-Nine client-side features in Kestrel's in-game settings (**Right Shift → QoL**),
+Nine client-side features in Night's in-game settings (**Right Shift → QoL**),
 grouped as Combat, HUD, Movement & Building and Visuals. Every one is **off by
 default**, has its own switch and description, shows its settings only while it is on,
 and is saved in `%LOCALAPPDATA%\Kestrel\config.json` (kept across restarts and updates).

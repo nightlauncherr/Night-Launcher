@@ -3,12 +3,12 @@
   End-to-end test of the launcher self-updater with real Windows executables.
 .DESCRIPTION
   Developer test only. Nothing here is ever published, and it does not touch
-  your real %LOCALAPPDATA%\Kestrel or your Kestrel.exe.
+  your real %LOCALAPPDATA%\Kestrel or your NightLauncher.exe.
 
   -Mode prepare (default)
     1. Builds the client mod.
     2. Creates a THROW-AWAY test signing key (dist\update-e2e\test-key.txt).
-    3. Builds an "old" Kestrel (the current version, e.g. 0.3.0) and a "new"
+    3. Builds an "old" Night Launcher (the current version, e.g. 0.3.0) and a "new"
        one (patch + 1, e.g. 0.3.1), both with the
        test key, a dummy GitHub update source and the e2e-update-test feature
        (which lets KESTREL_E2E_UPDATE_DIR serve the files from a local folder;
@@ -16,8 +16,8 @@
     4. Signs a manifest for the new version into dist\update-e2e\serve\.
        With -Required it is signed with minimum_supported = the new version,
        so the old launcher must block Play until it has updated.
-    5. Installs the old exe to dist\update-e2e\install\Kestrel.exe and
-       dist\update-e2e\install-crash\Kestrel.exe, with a seeded test data
+    5. Installs the old exe to dist\update-e2e\install\NightLauncher.exe and
+       dist\update-e2e\install-crash\NightLauncher.exe, with a seeded test data
        folder whose file hashes are recorded.
     6. Writes run-update.cmd / run-update-crash.cmd to start the old exe.
 
@@ -53,7 +53,7 @@ function Get-ReportedVersion([string]$exe) {
         $report = Join-Path $tmp 'r.txt'
         Start-Process -FilePath $exe -ArgumentList @('--self-check', "`"$report`"", '--root', "`"$(Join-Path $tmp 'data')`"") -Wait -WindowStyle Hidden | Out-Null
         $text = if (Test-Path $report) { Get-Content $report -Raw } else { '' }
-        if ($text -match 'PASS  version: Kestrel (\S+) ') { return $Matches[1] }
+        if ($text -match 'PASS  version: Night Launcher (\S+) ') { return $Matches[1] }
         return '?'
     } finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
 }
@@ -66,13 +66,13 @@ if ($Mode -eq 'verify') {
     $state = Get-Content (Join-Path $work 'state.json') -Raw | ConvertFrom-Json
 
     Write-Step 'Normal update (run-update.cmd)'
-    $exe = Join-Path $work 'install\Kestrel.exe'
-    Check ((Get-FileHash $exe -Algorithm SHA256).Hash -eq $state.newHash) "install\Kestrel.exe is the signed $newVersion build"
+    $exe = Join-Path $work 'install\NightLauncher.exe'
+    Check ((Get-FileHash $exe -Algorithm SHA256).Hash -eq $state.newHash) "install\NightLauncher.exe is the signed $newVersion build"
     Check ((Get-ReportedVersion $exe) -eq $newVersion) "installed exe reports version $newVersion"
-    Check (-not (Test-Path "$exe.old")) 'previous launcher (Kestrel.exe.old) cleaned up'
-    Check (-not (Test-Path "$exe.new")) 'no staged Kestrel.exe.new left'
+    Check (-not (Test-Path "$exe.old")) 'previous launcher (NightLauncher.exe.old) cleaned up'
+    Check (-not (Test-Path "$exe.new")) 'no staged NightLauncher.exe.new left'
     $upd = Join-Path $work 'data\updates'
-    $left = @(Get-ChildItem $upd -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Kestrel-*' -or $_.Name -like '*.part' })
+    $left = @(Get-ChildItem $upd -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'NightLauncher-*' -or $_.Name -like '*.part' })
     Check ($left.Count -eq 0) 'downloaded update removed from data\updates'
     $now = Get-Hashes (Join-Path $work 'data')
     $same = $true
@@ -92,10 +92,10 @@ if ($Mode -eq 'verify') {
     Check ($logs -match "updated from $([regex]::Escape($oldVersion)) to $([regex]::Escape($newVersion))") 'new version logged "updated from ... to ..."'
 
     Write-Step 'Crash after update (run-update-crash.cmd)'
-    $cexe = Join-Path $work 'install-crash\Kestrel.exe'
-    Check ((Get-FileHash $cexe -Algorithm SHA256).Hash -eq $state.oldHash) "install-crash\Kestrel.exe was rolled back to $oldVersion"
-    Check (-not (Test-Path "$cexe.old")) 'no Kestrel.exe.old left after rollback'
-    Check (-not (Test-Path "$cexe.failed")) 'no Kestrel.exe.failed left after rollback'
+    $cexe = Join-Path $work 'install-crash\NightLauncher.exe'
+    Check ((Get-FileHash $cexe -Algorithm SHA256).Hash -eq $state.oldHash) "install-crash\NightLauncher.exe was rolled back to $oldVersion"
+    Check (-not (Test-Path "$cexe.old")) 'no NightLauncher.exe.old left after rollback'
+    Check (-not (Test-Path "$cexe.failed")) 'no NightLauncher.exe.failed left after rollback'
     $clog = (Get-Content (Join-Path $work 'data-crash\logs\launcher.log'), (Join-Path $work 'data-crash\logs\launcher.prev.log') -Raw -ErrorAction SilentlyContinue) -join "`n"
     Check ($clog -match 'rolling back') 'old launcher detected the crash and rolled back'
 
@@ -141,7 +141,7 @@ function Build-Launcher([string]$out) {
 }
 
 Write-Step "Building OLD launcher $oldVersion (test build)"
-$oldExe = Join-Path $work "Kestrel-$oldVersion.exe"
+$oldExe = Join-Path $work "NightLauncher-$oldVersion.exe"
 Build-Launcher $oldExe
 
 Write-Step "Building NEW launcher $newVersion (test build)"
@@ -156,7 +156,7 @@ try {
     $edited = [regex]::Replace($tomlBak, $pattern, $replacement)
     if ($edited -eq $tomlBak) { throw 'could not set the test version in Cargo.toml' }
     [System.IO.File]::WriteAllText($toml, $edited, (New-Object System.Text.UTF8Encoding($false)))
-    $newExe = Join-Path $serve 'Kestrel.exe'
+    $newExe = Join-Path $serve 'NightLauncher.exe'
     Build-Launcher $newExe
 } finally {
     # Restore the real version files exactly.
@@ -172,7 +172,7 @@ End-to-end updater test release.
 - Signature, checksum and self-test are verified as in a real update
 "@
 $signArgs = @('sign', '--key', $key, '--exe', $newExe, '--version', $newVersion,
-    '--url', "$repoUrl/releases/download/v$newVersion/Kestrel.exe", '--notes', $notes,
+    '--url', "$repoUrl/releases/download/v$newVersion/NightLauncher.exe", '--notes', $notes,
     '--manifest-url', $manifestUrl, '--out', (Join-Path $serve 'kestrel-update.json'))
 if ($Required) { $signArgs += @('--minimum', $newVersion) }
 Invoke-Native $tool $signArgs
@@ -182,7 +182,7 @@ Invoke-Native $tool @('verify', '--manifest', (Join-Path $serve 'kestrel-update.
 Write-Step 'Installing the OLD launcher and seeding test data'
 foreach ($name in @('install', 'install-crash')) {
     New-Item -ItemType Directory -Force -Path (Join-Path $work $name) | Out-Null
-    Copy-Item $oldExe (Join-Path $work "$name\Kestrel.exe")
+    Copy-Item $oldExe (Join-Path $work "$name\NightLauncher.exe")
 }
 foreach ($d in @('data', 'data-crash')) {
     $root = Join-Path $work $d
@@ -203,7 +203,7 @@ $runner = @"
 @echo off
 rem TEST ONLY: starts the old test launcher; updates come from the serve folder.
 set KESTREL_E2E_UPDATE_DIR=$serve
-start "" "$work\install\Kestrel.exe" --root "$work\data"
+start "" "$work\install\NightLauncher.exe" --root "$work\data"
 "@
 Set-Content -Path (Join-Path $work 'run-update.cmd') -Value $runner -Encoding ascii
 $crash = @"
@@ -212,7 +212,7 @@ rem TEST ONLY: the "new" version simulates a crash on its first start, so the
 rem old launcher must roll back.
 set KESTREL_E2E_UPDATE_DIR=$serve
 set KESTREL_E2E_FAIL_AFTER_UPDATE=1
-start "" "$work\install-crash\Kestrel.exe" --root "$work\data-crash"
+start "" "$work\install-crash\NightLauncher.exe" --root "$work\data-crash"
 "@
 Set-Content -Path (Join-Path $work 'run-update-crash.cmd') -Value $crash -Encoding ascii
 

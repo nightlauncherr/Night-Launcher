@@ -1,21 +1,21 @@
 # Main menu
 
-Kestrel replaces Minecraft's main menu with its own (`client/.../menu/`). `MenuReplacer`
+Night replaces Minecraft's main menu with its own (`client/.../menu/`). `MenuReplacer`
 swaps in `KestrelMainMenu` from Forge's `GuiOpenEvent` whenever the game would open
 `GuiMainMenu` (start-up, leaving a world, disconnecting, closing a menu with no world), so
 no vanilla code is patched and every path is covered.
 
 ## What it shows
 
-- **Splash** (first time per session): the Kestrel mark centred with "Click to enter". Any
+- **Splash** (first time per session): the Night mark centred with "Click to enter". Any
   click or key enters; the mark glides to the top left and the menu builds in.
 - **Navigation** (left column, plain text, accent bar and slide on hover): Singleplayer,
-  Multiplayer, Realms, Mods (Forge), Minecraft Settings, Kestrel Settings, Quit Game. Each
+  Multiplayer, Realms, Mods (Forge), Minecraft Settings, Night Settings, Quit Game. Each
   opens the normal screen after a short fade; Back/Esc there returns to this menu.
 - **Background** (`MenuBackground`): graphite gradient, a faint warm light behind the
   character, flowing ribbons on the right that slide in, a few drifting sparkles, vignette.
   Coloured geometry only, no textures; allocation-free.
-- **Character**: your own skin (the applied Kestrel skin, else your account skin, else
+- **Character**: your own skin (the applied Night skin, else your account skin, else
   Steve/Alex offline) as a 3D player model, classic or slim, with every second-layer part.
   It has your name tag and a soft floor shadow. The **SKIN** button under its feet opens
   the Skin screen; a newly applied skin shows on the character straight away.
@@ -65,7 +65,7 @@ The tests check all four directions through the renderer's own transform chain.
 
 Vanilla 1.8.9 limits every screen without a world to 30 FPS (`Minecraft.getLimitFramerate`
 returns a hard-coded 30). That was why the menu felt choppy: drawing it takes well under a
-millisecond. `MixinMinecraft` makes Kestrel's animated screens (`FullFrameRateScreen`: the
+millisecond. `MixinMinecraft` makes Night's animated screens (`FullFrameRateScreen`: the
 main menu and the Skin screen) use the player's own Max Framerate setting instead, the same
 as in game, so VSync, a lower cap and Unlimited all behave as configured. Other screens keep
 vanilla's behaviour.

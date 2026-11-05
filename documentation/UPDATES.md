@@ -1,10 +1,10 @@
 # Launcher updates
 
-Kestrel updates itself from **GitHub Releases**. When `Kestrel.exe` starts it
+Night Launcher updates itself from **GitHub Releases**. When `NightLauncher.exe` starts it
 checks, in the background, whether a newer signed release exists. If one does,
-it shows **A Kestrel update is available** with the current and new versions,
+it shows **A Night Launcher update is available** with the current and new versions,
 the release notes, **Update Now** and **Later**. Update Now downloads the new
-`Kestrel.exe`, verifies it, swaps it in, and restarts into the new version.
+`NightLauncher.exe`, verifies it, swaps it in, and restarts into the new version.
 Your settings, Minecraft files, accounts, logs and cosmetics in
 `%LOCALAPPDATA%\Kestrel` are never touched.
 
@@ -16,11 +16,11 @@ Your settings, Minecraft files, accounts, logs and cosmetics in
 | Minecraft is running | **Update Now** is disabled until you close the game. |
 | Download interrupted, checksum wrong, self-test fails | Nothing is installed; the error is shown with **Retry**. The current version keeps working. |
 | New version crashes on start-up | The old launcher puts itself back automatically and shows what happened. |
-| Kestrel is in a folder you can't write to (e.g. `C:\Program Files`) | The original is left untouched. The verified new version is installed to `%LOCALAPPDATA%\Kestrel\app\Kestrel.exe` (which keeps updating itself from then on), with **Start new version** / **Open folder** buttons. No admin rights are requested. |
-| Release marked as required (`minimum_supported` newer than your version) | Kestrel 0.3.0 and newer: the prompt says "required", **Later** only closes the window, and **Play is blocked** (button shows *UPDATE REQUIRED*, Home shows an *Update now* banner) until the update is installed. The required minimum is saved in `launcher.json` (`update_required_minimum`), so it stays enforced offline; it clears itself once the launcher is new enough or a check finds no required release. Required updates are checked at every start, even with *Show new versions automatically* turned off. Kestrel 0.2.x and older only show the "required" prompt at every start; their Play button was never blocked. |
+| Night Launcher is in a folder you can't write to (e.g. `C:\Program Files`) | The original is left untouched. The verified new version is installed to `%LOCALAPPDATA%\Kestrel\app\NightLauncher.exe` (which keeps updating itself from then on), with **Start new version** / **Open folder** buttons. No admin rights are requested. |
+| Release marked as required (`minimum_supported` newer than your version) | Version 0.3.0 and newer: the prompt says "required", **Later** only closes the window, and **Play is blocked** (button shows *UPDATE REQUIRED*, Home shows an *Update now* banner) until the update is installed. The required minimum is saved in `launcher.json` (`update_required_minimum`), so it stays enforced offline; it clears itself once the launcher is new enough or a check finds no required release. Required updates are checked at every start, even with *Show new versions automatically* turned off. Versions 0.2.x and older only show the "required" prompt at every start; their Play button was never blocked. |
 
 Settings → **Updates**: installed version, update source, *Show new versions
-automatically when Kestrel starts* (optional updates only; required ones are always
+automatically when Night Launcher starts* (optional updates only; required ones are always
 checked), **Check for updates**, and **Retry update** after a
 failure. There is a single channel (`stable`), so there is no channel picker.
 
@@ -28,16 +28,16 @@ failure. There is a single channel (`stable`), so there is no channel picker.
 
 | | |
 |---|---|
-| Release repository | https://github.com/kestrellll45/Kestrel (public: launchers download anonymously) |
-| Manifest URL (compiled into `Kestrel.exe`) | `https://github.com/kestrellll45/Kestrel/releases/latest/download/kestrel-update.json` |
-| Artifact URL | `https://github.com/kestrellll45/Kestrel/releases/download/v<version>/Kestrel.exe` |
+| Release repository | https://github.com/nightlauncherr/Night-Launcher (public: launchers download anonymously) |
+| Manifest URL (compiled into `NightLauncher.exe`) | `https://github.com/nightlauncherr/Night-Launcher/releases/latest/download/kestrel-update.json` |
+| Artifact URL | `https://github.com/nightlauncherr/Night-Launcher/releases/download/v<version>/NightLauncher.exe` |
 | Signature | Ed25519 over `"kestrel-update-v1\0" + payload` |
 | Trusted public key | `launcher/update-public-key.txt` (key id `592de470`), set by `release.json` + this file at build time |
 | Private signing key | `%APPDATA%\Kestrel-signing\update-signing-key.txt` on the publishing PC only (folder ACL: your Windows account only). Never in the repo, CI, or a release. |
 
 `scripts\release.ps1` refuses to produce an exe whose built-in self-check does not
 report exactly this repository and key id; the summary line reads
-`Updates: enabled (kestrellll45/Kestrel, key 592de470)`.
+`Updates: enabled (nightlauncherr/Night-Launcher, key 592de470)`.
 
 Signing happens **locally** on purpose: there is no GitHub Actions workflow holding
 the key, so a compromised workflow, dependency or GitHub token cannot sign updates.
@@ -66,7 +66,7 @@ every installed launcher accepts; without it, no launcher can be updated again.
    `release.json`).
 3. Install Git and the GitHub CLI (`dist\tasks\2-install-github-tools.cmd` does a
    per-user install, or `winget install Git.Git GitHub.cli`) and run `gh auth login`.
-4. `scripts\release.ps1`, then replace your `Kestrel.exe` with `release\Kestrel.exe`
+4. `scripts\release.ps1`, then replace your `NightLauncher.exe` with `release\NightLauncher.exe`
    once. Later versions arrive through the launcher.
 
 ## Publishing a new version
@@ -79,7 +79,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bump-version.ps1 -Version 0.2.2
 notepad notes\0.2.2.md
 
 # 3. Commit and push to main
-git add -A; git commit -m "Kestrel 0.2.2"; git push
+git add -A; git commit -m "Night Launcher 0.2.2"; git push
 
 # 4. Build, test, sign and publish
 powershell -ExecutionPolicy Bypass -File scripts\publish-release.ps1 -Notes notes\0.2.2.md
@@ -96,14 +96,14 @@ powershell -ExecutionPolicy Bypass -File scripts\publish-release.ps1 -Notes note
 5. the signed manifest verifies against the public key and the exe's SHA-256.
 
 It then creates GitHub release `v<version>` **at that exact commit**, marked
-*Latest*, with **two assets: `Kestrel.exe` and `kestrel-update.json`**. Options:
+*Latest*, with **two assets: `NightLauncher.exe` and `kestrel-update.json`**. Options:
 `-Draft` (review on GitHub first; launchers ignore drafts), `-MinimumSupported x.y.z`
 (mark as required for older launchers), `-SkipTests`.
 
 The release must be the repository's **Latest** release (not a pre-release), because
 launchers read `releases/latest/download/kestrel-update.json`.
 
-The client mod is embedded in `Kestrel.exe`, so a launcher update also delivers
+The client mod is embedded in `NightLauncher.exe`, so a launcher update also delivers
 the matching client mod: on the next Play, the launcher replaces the old
 `kestrel-*.jar` in `instance\mods` (and only that file).
 
@@ -132,30 +132,30 @@ holds the key. The workflow uses only GitHub's own actions, pinned to exact comm
 ## How it works
 
 ```
-Kestrel.exe starts ─▶ background thread: GET releases/latest/download/kestrel-update.json
+NightLauncher.exe starts ─▶ background thread: GET releases/latest/download/kestrel-update.json
                       (HTTPS, redirects checked hop by hop, 256 KB limit)
                     ─▶ verify Ed25519 signature with the public key compiled into the exe
                     ─▶ validate: product, channel, semver, HTTPS URL on an allowed host,
                        .exe, 64-hex SHA-256, plausible size
                     ─▶ newer than this version and not dismissed? show the window
-Update Now ─▶ download to %LOCALAPPDATA%\Kestrel\updates\Kestrel-x.y.z.exe.part
+Update Now ─▶ download to %LOCALAPPDATA%\Kestrel\updates\NightLauncher-x.y.z.exe.part
            ─▶ exact size + SHA-256 from the signed manifest, then rename
            ─▶ PE header check, then run  <new> --self-check  in a scratch folder:
               must exit 0, embed the client mod, and report version x.y.z
            ─▶ re-hash, then swap next to the running exe:
-                Kestrel.exe ─rename▶ Kestrel.exe.old   (Windows allows renaming a running exe)
-                Kestrel.exe.new ─rename▶ Kestrel.exe   (undone if it fails)
+                NightLauncher.exe ─rename▶ NightLauncher.exe.old   (Windows allows renaming a running exe)
+                NightLauncher.exe.new ─rename▶ NightLauncher.exe   (undone if it fails)
            ─▶ start the new exe with --post-update/--update-health and wait up to 45 s
                 health marker appears ─▶ old launcher closes
-                new exe exits early   ─▶ rollback: Kestrel.exe.old renamed back
-New exe ─▶ writes the health marker once its window is up, deletes Kestrel.exe.old
+                new exe exits early   ─▶ rollback: NightLauncher.exe.old renamed back
+New exe ─▶ writes the health marker once its window is up, deletes NightLauncher.exe.old
            (retrying until the old process has exited) and the downloaded copy
 ```
 
 Code: `launcher/crates/kestrel-core/src/update/` (manifest, fetch, install) and
 `launcher/crates/kestrel-launcher/src/updater.rs` (window, Settings card, restart).
 Publisher tool: `launcher/crates/kestrel-release` (`keygen`, `pubkey`, `sign`,
-`verify`). It is never shipped inside `Kestrel.exe`.
+`verify`). It is never shipped inside `NightLauncher.exe`.
 
 ### Testing the updater
 
@@ -170,14 +170,14 @@ left untouched. The release service is mocked; no public release is needed.
 End-to-end with real Windows executables (developer test, nothing is published):
 
 ```powershell
-scripts\update-e2e-prepare.cmd     # builds Kestrel 0.2.0 + 0.2.1 test builds, signs with a throw-away key
+scripts\update-e2e-prepare.cmd     # builds Night Launcher 0.2.0 + 0.2.1 test builds, signs with a throw-away key
 dist\update-e2e\run-update.cmd        # click Update Now: download, verify, self-test, swap, restart
 dist\update-e2e\run-update-crash.cmd  # the "new" version crashes on start: the old one must roll back
 scripts\update-e2e-verify.cmd      # checks results; prints E2E RESULT: PASS/FAIL
 ```
 
 The test builds are compiled with the `e2e-update-test` cargo feature, which lets
-`KESTREL_E2E_UPDATE_DIR` serve `kestrel-update.json` and `Kestrel.exe` from a local
+`KESTREL_E2E_UPDATE_DIR` serve `kestrel-update.json` and `NightLauncher.exe` from a local
 folder (URL checks, signature, hash and self-test still apply) and adds a simulated
 start-up crash. `release.ps1` refuses to publish any exe whose self-check reports
 these hooks (`update test hooks: none` is required).
@@ -192,7 +192,7 @@ these hooks (`update test hooks: none` is required).
 { "schema": 1, "product": "kestrel-launcher", "channel": "stable",
   "version": "0.2.1", "published": "2026-10-25T12:00:00Z", "minimum_supported": null,
   "notes": "…",
-  "windows_x86_64": { "url": "https://github.com/<repo>/releases/download/v0.2.1/Kestrel.exe",
+  "windows_x86_64": { "url": "https://github.com/<repo>/releases/download/v0.2.1/NightLauncher.exe",
                       "sha256": "<64 hex>", "size": 22642688 } }
 ```
 The signature covers the bytes `"kestrel-update-v1\0" || payload`, so there is no
@@ -218,7 +218,7 @@ JSON canonicalisation.
   an old signed manifest does nothing.
 - The working launcher is never deleted before the new one is verified and in place,
   and a new version that crashes on start-up is rolled back.
-- Update requests send no user data: a plain GET with `User-Agent: Kestrel-Launcher/<version>`.
+- Update requests send no user data: a plain GET with `User-Agent: Night Launcher-Launcher/<version>`.
 
 **Not guaranteed / your responsibility:**
 - **Your private key is the root of trust.** Anyone who has it can publish an update
@@ -227,9 +227,9 @@ JSON canonicalisation.
   new key (delete the old file and re-run `setup-updates.ps1`) and have users install
   the next build manually once. Key rotation without a manual install isn't implemented.
 - **Windows code signing (Authenticode) isn't implemented.** Downloads aren't
-  Authenticode-signed, so SmartScreen may warn the first time a new `Kestrel.exe` runs,
+  Authenticode-signed, so SmartScreen may warn the first time a new `NightLauncher.exe` runs,
   and some antivirus products are more suspicious of unsigned executables. That needs a
   paid code-signing certificate.
-- A user who installs a Kestrel.exe from somewhere else gets whatever key *that* build
+- A user who installs a NightLauncher.exe from somewhere else gets whatever key *that* build
   trusts. The updater protects the update path, not the first download.
 - If GitHub is down or blocked, updates are unavailable (the launcher still works).

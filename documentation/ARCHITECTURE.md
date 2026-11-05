@@ -3,7 +3,7 @@
 ## Overview
 
 ```
-Kestrel.exe (Rust, egui)                      Minecraft 1.8.9 (Java 8, separate process)
+NightLauncher.exe (Rust, egui)                      Minecraft 1.8.9 (Java 8, separate process)
 ├─ kestrel-launcher  GUI, worker threads      ├─ LaunchWrapper + Forge 11.15.1.2318
 └─ kestrel-core                               └─ kestrel-<ver>.jar (client mod)
    ├─ mojang/forge/assets/runtime  metadata      ├─ config      JSON config, presets
@@ -23,13 +23,13 @@ The launcher and the mod share exactly four things:
    `<root>/instance/kestrel`). The QoL page manages `instance/mods` and the resource-pack
    lines of `instance/options.txt` only while the game is not running (see QOL.md).
 2. JVM properties: `-Dkestrel.requestedPreset=<potato|competitive|visual>` (applied by the
-   mod once per distinct request) and the log marker `[Kestrel] Client initialized`, which
+   mod once per distinct request) and the log marker `[Night Launcher] Client initialized`, which
    the launcher watches for to confirm the mod loaded.
 3. The launcher request file `instance/kestrel/launcher-cosmetics.json` (cosmetics and
    Fullbright; see "Cosmetics page" below).
 4. The cape catalog `client/src/main/resources/assets/kestrel/capes.json`, compiled into
    both (see [CAPES.md](CAPES.md)), and the activity marker
-   `[Kestrel] activity <token>: <state>` with `-Dkestrel.activityToken` for Discord Rich
+   `[Night Launcher] activity <token>: <state>` with `-Dkestrel.activityToken` for Discord Rich
    Presence (see [DISCORD.md](DISCORD.md)).
 
 ## Launcher
@@ -74,7 +74,7 @@ Minecraft token is fetched fresh at each launch.
 
 ## Packaging
 
-`scripts/release.ps1` produces a single `Kestrel.exe`:
+`scripts/release.ps1` produces a single `NightLauncher.exe`:
 
 - The launcher is native Rust; all Rust dependencies are statically linked, and
   `launcher/.cargo/config.toml` links the MSVC C runtime statically (`+crt-static`).
@@ -85,7 +85,7 @@ Minecraft token is fetched fresh at each launch.
   `<root>/cache/client/` (only if its SHA-1 differs) and installs it into `instance/mods`.
   Lookup order: `%KESTREL_MOD_JAR%` → embedded → `<exe dir>/client/` (dev builds).
 - Nothing is extracted to temporary folders; all state is under `%LOCALAPPDATA%\Kestrel`.
-- `Kestrel.exe --self-check <file>` verifies the embedded mod (valid jar with `mcmod.info`
+- `NightLauncher.exe --self-check <file>` verifies the embedded mod (valid jar with `mcmod.info`
   and the mod class), unpacking, icon and every bundled preview, without opening a window.
 
 ### Graphics fallback
@@ -132,7 +132,7 @@ the launcher and the game show the same art.
 
 All cosmetics are **local**: rendered only by your client. Nothing is sent to servers, so
 other players see them only if they run a compatible client that implements them. Restricted
-catalog capes are the one case where Kestrel draws a cape on another player: the catalog
+catalog capes are the one case where Night Launcher draws a cape on another player: the catalog
 assigns them to that player's UUID (see [CAPES.md](CAPES.md)).
 
 ## Skin page (launcher ↔ client)
@@ -158,7 +158,7 @@ angles (`EntityRenderer.orientCamera`, `Entity.setAngles`, `ActiveRenderInfo`,
 | Toggle sprint | `ClientTickEvent` + `KeyBinding.setKeyBindState`; vanilla sprint rules still apply |
 | CPS | `MouseEvent` (in-game only; no global hooks) |
 | Capes | `RenderPlayerEvent.Post`: your selected cape on you, catalog-assigned capes on their owners (UUID); replicates `RendererLivingEntity` transforms and vanilla `LayerCape` motion. PNG strips and GIFs (own compositing, per-frame timing), see CAPES.md |
-| Activity (Discord) | `ClientTickEvent`: logs `[Kestrel] activity <token>: menu/singleplayer/multiplayer` on change |
+| Activity (Discord) | `ClientTickEvent`: logs `[Night Launcher] activity <token>: menu/singleplayer/multiplayer` on change |
 | Skies | Forge `WorldProvider#setSkyRenderer` (Overworld only; uninstalled when disabled) |
 | Kill effects | Players only. `AttackEntityEvent` (who you hit) + `ClientTickEvent` (victim's hurt events, health ≤ 0, other attackers nearby → `KillAttribution`) + `ClientChatReceivedEvent` (kill feed that makes you the killer → `KillMessageMatcher`) → `KillEffectManager`; see KILL_EFFECTS.md |
 | Frame stats | `RenderTickEvent` (ring buffer, avg + 1% low) |
@@ -166,7 +166,7 @@ angles (`EntityRenderer.orientCamera`, `Entity.setAngles`, `ActiveRenderInfo`,
 | Combat / world visuals | `WorldVisuals`: `AttackEntityEvent` (own hits → sparks), `ClientTickEvent` (projectile trails, bounded and pooled), `RenderWorldLastEvent` (draw, incl. XP orb glow); `MixinEntityRendererWeather` redirects the rain/snow texture binds when refined weather is on |
 | 3D kill effects | `Fx` geometry toolkit + `Fx3dEffect` (`AdvancedEffects`, `AdvancedEffects2`), drawn from `KillEffectManager`'s `RenderWorldLastEvent` |
 | Zoom / free-look | `RenderTickEvent(START)` reads the keys and advances `ZoomState`/`FreeLookState`; mixins read the per-frame values from `CameraHooks` (see ZOOM_FREELOOK.md) |
-| Local skin | `SkinManager` (`ClientTickEvent` polls `skins/skin.json`) + skin mixins; SKIN button on the Kestrel main menu (see SKINS.md) |
+| Local skin | `SkinManager` (`ClientTickEvent` polls `skins/skin.json`) + skin mixins; SKIN button on the Night main menu (see SKINS.md) |
 | Main menu | `GuiOpenEvent`: `MenuReplacer` swaps `GuiMainMenu` for `KestrelMainMenu` (background, navigation, `EntranceAnimation` + `PlayerModelRenderer` character); see MAIN_MENU.md |
 
 Threading: config is only touched on the game thread; saves are debounced (1 s), serialised

@@ -1,6 +1,6 @@
 # Custom skies
 
-Put PNG files in `%LOCALAPPDATA%\Kestrel\instance\kestrel\skies\` (Kestrel menu → Sky →
+Put PNG files in `%LOCALAPPDATA%\Kestrel\instance\kestrel\skies\` (Night menu → Sky →
 "Open custom skies folder"), then pick them under **Sky**.
 
 ## Format
@@ -31,10 +31,10 @@ skies from any function of view direction.
 `client/src/main/resources/assets/kestrel/skies.json` lists the bundled skies (id, name,
 category); atlases are `textures/sky/<id>.png` and menu thumbnails (the north/east/south
 strip, 384x128) `textures/sky/thumbs/<id>.png`. The launcher embeds the same file. Categories:
-Sunsets, Space, Clouds & Aurora, Dark, Neon, Fantasy, Minimal, Blocky and Kestrel; uploads are
+Sunsets, Space, Clouds & Aurora, Dark, Neon, Fantasy, Minimal, Blocky and Night; uploads are
 listed under Custom, and "Vanilla sky" turns the custom sky off. Switching applies
 immediately in game (no restart). `tools/gen_cosmetics.py` generates the bundled skies
 (seam-free, same corner table) and their thumbnails.
 
 Custom skies apply in the Overworld only and replace the sun, moon and stars while enabled.
-If another mod installs its own sky renderer, Kestrel leaves it alone and reports it.
+If another mod installs its own sky renderer, Night leaves it alone and reports it.

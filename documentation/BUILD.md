@@ -1,4 +1,4 @@
-# Building Kestrel
+# Building Night Launcher
 
 ## Prerequisites (Windows 10/11 x64)
 
@@ -16,9 +16,9 @@ several minutes; later builds are fast.
 
 ```powershell
 scripts\setup.ps1 [-Yes]      # check / install prerequisites
-scripts\build.ps1 [-Run]      # dist\Kestrel\Kestrel.exe + dist\Kestrel\client\kestrel-<ver>.jar
+scripts\build.ps1 [-Run]      # dist\NightLauncher\NightLauncher.exe + dist\NightLauncher\client\kestrel-<ver>.jar
 scripts\test.ps1              # cargo fmt/clippy/test + gradle test
-scripts\package.ps1           # tests + build + dist\Kestrel-<ver>-windows-x64.zip (+ .sha256)
+scripts\package.ps1           # tests + build + dist\NightLauncher-<ver>-windows-x64.zip (+ .sha256)
 ```
 
 (Prefix each with `powershell -ExecutionPolicy Bypass -File` if script execution is disabled.)
@@ -39,56 +39,56 @@ The launcher looks for the mod in `<launcher exe dir>\client\kestrel-*.jar`
 DevAuth is included for signing in during development (see its README; disabled unless
 configured).
 
-## Standalone release (Kestrel.exe)
+## Standalone release (NightLauncher.exe)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 ```
 
-Output: `release\Kestrel.exe` (plus `Kestrel.exe.sha256.txt`). The script runs the tests,
+Output: `release\NightLauncher.exe` (plus `NightLauncher.exe.sha256.txt`). The script runs the tests,
 builds the mod, builds the launcher for `x86_64-pc-windows-msvc` with the mod jar, icon,
 fonts and cosmetic previews embedded and the C runtime linked statically, then copies the
-exe to a temp folder outside the project and runs `Kestrel.exe --self-check` there against a
+exe to a temp folder outside the project and runs `NightLauncher.exe --self-check` there against a
 throw-away data directory, checks the DLL imports, and prints the final size and location.
 `-SkipTests` skips step 1. Full output: `dist\release-log.txt`.
 
-`Kestrel.exe` needs nothing else: no project folder, no .NET, no Java, no VC++ redistributable.
+`NightLauncher.exe` needs nothing else: no project folder, no .NET, no Java, no VC++ redistributable.
 On first Play it downloads Minecraft 1.8.9, Forge and Mojang's Java 8 from the official servers
 into `%LOCALAPPDATA%\Kestrel` (these are never bundled, for licensing reasons). Settings,
 game files, logs and uploaded cosmetics live there too, so moving or replacing the exe (an
 upgrade) keeps everything. A newer exe replaces only the client mod jar in `instance\mods`.
 
-You can run the self-check yourself: `Kestrel.exe --self-check report.txt`.
+You can run the self-check yourself: `NightLauncher.exe --self-check report.txt`.
 
 ## First launch
 
-1. Start `Kestrel.exe`. Data goes to `%LOCALAPPDATA%\Kestrel` (override with
-   `Kestrel.exe --root D:\Games\Kestrel` or `%KESTREL_HOME%`).
+1. Start `NightLauncher.exe`. Data goes to `%LOCALAPPDATA%\Kestrel` (override with
+   `NightLauncher.exe --root D:\Games\Night Launcher` or `%KESTREL_HOME%`).
 2. **Offline mode** works immediately for singleplayer and offline-mode servers.
 3. Press **Play**. The first run downloads a few hundred MB (Minecraft, libraries, assets, Forge,
    Mojang's Java 8 runtime), verifying SHA-1 hashes where Mojang/Forge publish them.
-4. The Home page shows "Forge loaded" and "Kestrel loaded" once the game has started.
-5. In game, press **Right Shift** for the Kestrel menu.
+4. The Home page shows "Forge loaded" and "Night Launcher loaded" once the game has started.
+5. In game, press **Right Shift** for the Night Launcher menu.
 6. **Cosmetics** (left sidebar of the launcher): equip kill effects, skies and capes, upload
    your own PNGs. Changes apply on the next Play, or within about a second if the game is
    already running.
 
 ## Microsoft sign-in (required for online servers such as Hypixel)
 
-Kestrel uses Microsoft's OAuth device-code flow: you sign in on microsoft.com in your
-browser and enter a short code. Kestrel never sees your password. Tokens are stored
+Night Launcher uses Microsoft's OAuth device-code flow: you sign in on microsoft.com in your
+browser and enter a short code. Night Launcher never sees your password. Tokens are stored
 encrypted with Windows DPAPI (bound to your Windows account) in `accounts.dat`.
 
-Kestrel ships with its own app registration built in (application (client) ID
+Night Launcher ships with its own app registration built in (application (client) ID
 `c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb`, `kestrel_core::auth::BUILT_IN_CLIENT_ID`), so
 players just press **Sign in with Microsoft**; nothing needs configuring. A client ID is a
 public identifier, not a secret. The steps below are only for forks that want their own
 registration: put its ID in Settings → Advanced, which overrides the built-in one (leave it
-empty to use Kestrel's). The built-in app must meet the same requirements (personal
+empty to use Night Launcher's). The built-in app must meet the same requirements (personal
 accounts, public client flows, Mojang approval in step 5).
 
 Every third-party launcher needs its own app registration in **Microsoft Entra ID**.
-Kestrel signs in with the device-code flow against the personal-account authority
+Night Launcher signs in with the device-code flow against the personal-account authority
 `https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` and opens the
 sign-in page Microsoft returns (normally `https://www.microsoft.com/link`).
 
@@ -101,7 +101,7 @@ directory cannot use the Azure portal or Entra admin center: sign-in fails with
 > '74658136-14ec-4630-ad9b-26e160ff0fc6'(ADIbizaUX) in that tenant.
 
 That error comes from the **Azure portal** (`ADIbizaUX` is the portal's own app),
-not from Kestrel. Fix it once by creating a directory: in an InPrivate window open
+not from Night Launcher. Fix it once by creating a directory: in an InPrivate window open
 <https://azure.microsoft.com/free>, sign in with your personal account and complete
 the free sign-up. It creates a *Default Directory* in which you are Global
 Administrator. (Alternatively, ask an admin of an existing tenant to invite you.)
@@ -109,14 +109,14 @@ Administrator. (Alternatively, ask an admin of an existing tenant to invite you.
 1. Open <https://entra.microsoft.com>. If you belong to several directories, switch to
    yours (gear icon → **Directories + subscriptions**). Go to **Entra ID** →
    **App registrations** → **New registration**.
-2. Name: anything (e.g. "Kestrel Launcher"). Supported account types:
-   **Personal Microsoft accounts only** (this matches Kestrel's `/consumers`
+2. Name: anything (e.g. "Night Launcher Launcher"). Supported account types:
+   **Personal Microsoft accounts only** (this matches Night Launcher's `/consumers`
    authority). No redirect URI.
 3. Open the new app → **Authentication** → **Advanced settings** → set
    **Allow public client flows** to **Yes** → **Save**. No client secret or certificate.
 4. On the app's **Overview** page copy **Application (client) ID** (a GUID) into
-   Kestrel → Settings → Advanced. Do *not* use the Object ID, the Directory (tenant)
-   ID, or any ID shown in a Microsoft error page; Kestrel rejects non-GUIDs and the
+   Night Launcher → Settings → Advanced. Do *not* use the Object ID, the Directory (tenant)
+   ID, or any ID shown in a Microsoft error page; Night Launcher rejects non-GUIDs and the
    Azure portal's ID with an explanation.
 5. **Mojang approval:** new app IDs must be approved before Minecraft's services accept
    them. Submit the app ID at <https://aka.ms/mce-reviewappid>. Until approved, sign-in

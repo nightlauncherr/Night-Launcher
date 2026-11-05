@@ -1,6 +1,6 @@
 # Discord Rich Presence
 
-Kestrel can show its activity in your Discord profile:
+Night Launcher can show its activity in your Discord profile:
 
 | Situation | Discord shows |
 |---|---|
@@ -14,20 +14,20 @@ Kestrel can show its activity in your Discord profile:
 Second line "Minecraft 1.8.9", elapsed time since the launcher opened or the game started,
 large image = art asset `kestrel`. Server addresses, world names and account details are
 never sent. The only peer is the Discord app on your PC (local IPC); nothing goes over the
-network from Kestrel for this.
+network from Night Launcher for this.
 
 ## One-time setup (needs your Discord account)
 
 Discord shows the application's **name** and **images** from its Developer Portal, so the
-app has to exist there. Kestrel does not ship an application ID.
+app has to exist there. Night Launcher does not ship an application ID.
 
 1. Open <https://discord.com/developers/applications> → **New Application** → name it
-   `Kestrel`.
-2. **Rich Presence → Art Assets**: upload the Kestrel logo
+   `Night Launcher`.
+2. **Rich Presence → Art Assets**: upload the Night Launcher logo
    (`launcher/crates/kestrel-launcher/assets/night-icon.png`, at least 512×512 recommended)
    with the key `kestrel`.
 3. **General Information**: copy the **Application ID**.
-4. Kestrel → **Settings → Advanced**: tick **Discord Rich Presence** (on by default) and
+4. Night Launcher → **Settings → Advanced**: tick **Discord Rich Presence** (on by default) and
    paste the ID. The status line says "Connected to Discord." once it works.
 
 To bake the ID into release builds instead, it can be set as the default in
@@ -41,7 +41,7 @@ To bake the ID into release builds instead, it can be set as the default in
   (5 s → 60 s) while Discord is closed, coalesces updates (≥ 2 s apart), and clears the
   activity when the launcher exits or the setting is turned off. It never starts processes
   and never blocks the UI; shutdown waits at most 0.5 s.
-* Game state: the mod's `ActivityReporter` logs `[Kestrel] activity <token>: <state>` on
+* Game state: the mod's `ActivityReporter` logs `[Night Launcher] activity <token>: <state>` on
   change. `<token>` is random per launch (`-Dkestrel.activityToken`), so a chat message
   that quotes the marker cannot spoof the state. The launcher parses it in
   `launch::parse_activity`.

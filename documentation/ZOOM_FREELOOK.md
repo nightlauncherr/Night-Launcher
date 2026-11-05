@@ -9,9 +9,9 @@ unchanged.
 | **C** (hold) | Zoom in smoothly; release to zoom back out. |
 | **Left Alt** (hold) | Free-look: look around 360° while you keep moving the way you were facing; release to return. |
 
-Rebind both under **Options → Controls → Kestrel** ("Zoom (hold)", "Free look (hold)");
+Rebind both under **Options → Controls → Night** ("Zoom (hold)", "Free look (hold)");
 they are saved in `options.txt` like any key binding. Mouse buttons work too. If you bind
-one of them to a key that is also used by something else, both still work: Kestrel reads
+one of them to a key that is also used by something else, both still work: Night reads
 the key's physical state, so it doesn't depend on Minecraft 1.8.9 delivering the key to only
 one binding. The Controls screen still marks the clash in red so you notice it.
 
@@ -29,7 +29,7 @@ Settings (in-game menu, Right Shift → General → *Zoom & free look*):
 ## How it works
 
 **Zoom** multiplies the world field of view for the current frame inside the hook that
-already makes Kestrel's FOV static (`MixinEntityRenderer` → `StaticFov.fov(…, zoom)`). The
+already makes Night's FOV static (`MixinEntityRenderer` → `StaticFov.fov(…, zoom)`). The
 FOV setting is never written, so zoom can't stack, can't persist after release, and changing
 the FOV slider while zoomed applies immediately. The held item and the debug camera are not
 zoomed. Each press or release starts a timed transition from the current zoom, eased in and
@@ -57,7 +57,7 @@ jumping to its end (`camera/ZoomState`).
 - Release returns the camera on the same frame. It eases back to where you are facing, the
   shortest way round, in at most 0.12 s whatever the angle, fastest at the start (ease-out),
   and ends exactly on your rotation; mouse movement turns your player again immediately. If
-  Kestrel switched you to third person for free-look, it switches straight back to first person
+  Night switched you to third person for free-look, it switches straight back to first person
   on release (that is already a cut, so there is no animation to wait for); it leaves the
   perspective alone if you pressed F5 meanwhile.
 

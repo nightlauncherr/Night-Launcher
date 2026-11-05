@@ -3,7 +3,7 @@
 The launcher's **Mods** page (left navigation, under Cosmetics; called QoL before 0.10.0)
 has three tabs: **Mod Manager**, **Resource Packs** and **Performance presets**. Fullbright
 no longer has a launcher switch (since 0.10.0; use a Fullbright mod, which the Mod
-Manager can install). Everything works on Kestrel's own
+Manager can install). Everything works on Night's own
 game directory, `%LOCALAPPDATA%\Kestrel\instance` (the folder Minecraft is started with
 via `--gameDir`); your normal `.minecraft` is never touched.
 
@@ -44,7 +44,7 @@ running, close the game before changing mods or packs.)
   `%LOCALAPPDATA%\Kestrel\mods-trash\<UTC timestamp>-<name>`. **Recently removed**
   lists these with **Restore** (puts the mod back as disabled). Delete the trash folder
   by hand to free the space.
-* **Kestrel client** (`kestrel-<version>.jar`) is built into `Kestrel.exe` and
+* **Night client** (`kestrel-<version>.jar`) is built into `NightLauncher.exe` and
   reinstalled on every Play, so it is shown as *Built in* without Disable/Remove.
   File names starting with `kestrel-` are reserved for it.
 * Mod contents are only read (`mcmod.info` and the manifest, at most 1 MB each), never
@@ -82,7 +82,7 @@ running, close the game before changing mods or packs.)
 ## Fullbright
 
 > Since 0.10.0 the launcher no longer has a Fullbright toggle (the tab is now **Mods**
-> and players use a Fullbright mod instead). On start the launcher switches Kestrel's
+> and players use a Fullbright mod instead). On start the launcher switches Night's
 > built-in Fullbright off once if it was on, so it can't stay stuck on. The client code
 > below is unchanged.
 
@@ -91,12 +91,12 @@ A switch that lights up caves, nights and dark rooms as if everything were fully
 Turning it off restores Minecraft's normal lighting on the next frame.
 
 How it works: Minecraft 1.8.9 computes its lightmap in `EntityRenderer.updateLightmap`,
-which reads your Brightness (gamma) setting once. Kestrel's mixin
+which reads your Brightness (gamma) setting once. Night's mixin
 (`client/.../mixin/MixinEntityRenderer.java`) replaces only that read with
 `max(your gamma, 16)` while Fullbright is on; with gamma ≥ 16 even the darkest lightmap
 value (0.03) is pushed to full brightness. Your Brightness slider, `options.txt`, block
 light, worlds and resource packs are never modified, so nothing can accumulate and
-uninstalling Kestrel leaves no trace.
+uninstalling Night leaves no trace.
 
 The setting is stored in the client config (`instance\kestrel\config.json` →
 `"qol": {"fullbright": true}`). The launcher sends changes through the existing

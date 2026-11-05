@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  Builds the Kestrel client mod and launcher and assembles dist\Kestrel.
+  Builds the Night client mod and Night Launcher and assembles dist\NightLauncher.
 .PARAMETER Configuration
   release (default) or debug for the launcher.
 .PARAMETER SkipMod / SkipLauncher
   Build only one half.
 .PARAMETER Run
-  Start the launcher from dist\Kestrel when the build succeeds.
+  Start the launcher from dist\NightLauncher when the build succeeds.
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Run
 #>
@@ -25,7 +25,7 @@ try { Start-Transcript -Path $logFile -Force | Out-Null } catch { }
 trap { Write-Host "BUILD FAILED: $_" -ForegroundColor Red; try { Stop-Transcript | Out-Null } catch { }; break }
 
 $version = Get-ModVersion
-$out = Join-Path $DistDir 'Kestrel'
+$out = Join-Path $DistDir 'NightLauncher'
 New-Item -ItemType Directory -Force -Path (Join-Path $out 'client') | Out-Null
 
 if (-not $SkipMod) {
@@ -45,7 +45,7 @@ if (-not $SkipMod) {
 if (-not $SkipLauncher) {
     Write-Step "Building launcher ($Configuration)"
     if (-not (Test-Command 'cargo') -and (Test-Path "$env:USERPROFILE\.cargo\bin\cargo.exe")) { $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path" }
-    # Embed the freshly built mod so dist\Kestrel\Kestrel.exe is standalone too.
+    # Embed the freshly built mod so dist\NightLauncher\NightLauncher.exe is standalone too.
     $modJar = Join-Path $ClientDir "build\libs\kestrel-$version.jar"
     if (Test-Path $modJar) { $env:KESTREL_EMBED_MOD_JAR = (Resolve-Path $modJar).Path }
     $cargoArgs = @('build', '--locked', '-p', 'kestrel-launcher')
@@ -56,13 +56,13 @@ if (-not $SkipLauncher) {
         Remove-Item Env:\KESTREL_EMBED_MOD_JAR -ErrorAction SilentlyContinue
     }
     $exe = Join-Path $LauncherDir "target\$Configuration\kestrel-launcher.exe"
-    Copy-Item $exe (Join-Path $out 'Kestrel.exe') -Force
-    Write-Ok "launcher: $(Join-Path $out 'Kestrel.exe')"
+    Copy-Item $exe (Join-Path $out 'NightLauncher.exe') -Force
+    Write-Ok "launcher: $(Join-Path $out 'NightLauncher.exe')"
 }
 
 Write-Host "`nBuild complete: $out  (log: $logFile)" -ForegroundColor Green
 if ($Run) {
     Write-Step 'Starting launcher'
-    Start-Process -FilePath (Join-Path $out 'Kestrel.exe') -WorkingDirectory $out
+    Start-Process -FilePath (Join-Path $out 'NightLauncher.exe') -WorkingDirectory $out
 }
 try { Stop-Transcript | Out-Null } catch { }

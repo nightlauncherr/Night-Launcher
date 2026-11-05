@@ -53,7 +53,7 @@ Only for a player you hit yourself, and only when the kill is clearly yours:
 | Confetti (`confetti`) | Celebration | - | `fireworks.twinkle` |  |
 | Rainbow rings (`rainbow`) | Celebration | - | `random.orb` |  |
 | Falling stars (`starfall`) | Celebration | - | `fireworks.twinkle` |  |
-| Kestrel strike (`kestrel`) | Kestrel | - | `mob.bat.takeoff` |  |
+| Kestrel strike (`kestrel`) | Signature | - | `mob.bat.takeoff` |  |
 | Lightning strike (`bolt_strike`) | 3D | - | `ambient.weather.thunder` | Three forked 3D bolts (glow + white core ribbons) strike from 22 blocks up, with a ground flash, expanding shock ring and a scorch mark. |
 | Energy explosion (`energy_nova`) | 3D | yes | `random.explode` | An orb in your colour charges with orbiting rings, then detonates into a Fresnel-lit shell with three crossing shock rings. |
 | Black hole (`black_hole`) | 3D | - | `mob.endermen.portal` | A black event horizon with a photon ring, a tilted spinning accretion disk with spiral arms and in-falling streaks; collapses into a flash and shock ring. |
@@ -73,7 +73,7 @@ Only for a player you hit yourself, and only when the kill is clearly yours:
 | Flame wings (`flame_wings`) | 3D | - | `mob.enderdragon.wings` | Two wings of flame feathers unfold behind the victim (facing you), beat once and burst into embers. |
 | Shattered dimension (`shattered_dimension`) | 3D | - | `dig.glass` | Glowing cracks open in space, then 26 glassy shards (dark interior, iridescent edges) drift and fly apart. |
 | Neon pulse (`neon_pulse`) | 3D | yes | `note.pling` | Neon hexagon pulses race over the ground while equaliser bars in your colour and its partner hue bounce around the victim. |
-| Kestrel talon (`kestrel_talon`) | 3D | - | `mob.bat.takeoff` | Kestrel's signature: a falcon of light dives through the victim, leaves three talon slashes and a flurry of kestrel-coloured feathers. |
+| Kestrel talon (`kestrel_talon`) | 3D | - | `mob.bat.takeoff` | Night's signature: a falcon of light dives through the victim, leaves three talon slashes and a flurry of kestrel-coloured feathers. |
 
 ### 3D effects
 

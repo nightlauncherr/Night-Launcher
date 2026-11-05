@@ -19,7 +19,7 @@ Item switching selects the new slot at once; only the hand's motion is eased.
 
 | Style | What it does |
 |---|---|
-| Kestrel slash (default) | Wind-up: the blade turns to face you, rises and cocks back. Strike: it rolls up and over to the left and down, leaving a glowing crescent trail in the sword's own colour with a bright leading edge. Follow-through: it carries on below the screen, keeps turning the same way and rises back into place (one full turn, never rewinding). |
+| Night slash (default) | Wind-up: the blade turns to face you, rises and cocks back. Strike: it rolls up and over to the left and down, leaving a glowing crescent trail in the sword's own colour with a bright leading edge. Follow-through: it carries on below the screen, keeps turning the same way and rises back into place (one full turn, never rewinding). |
 | Smooth | Minecraft's motion, eased (vanilla's `sqrt` timing jumps at the start) and run on real time. |
 | Chop | Lifts back, then drives down and across; suited to axes. |
 | Vanilla | Minecraft's own animation, untouched. |
@@ -52,7 +52,7 @@ For checking the animation frame by frame, the JVM option
 | Projectile trails | Fading ribbons behind arrows (gold for critical arrows), ender pearls, snowballs, eggs and potions. |
 | Arrow impact bursts | A small glow and ring where an arrow lands. |
 | Experience orb glow | A soft pulsing glow around experience orbs within 32 blocks. |
-| Refined rain and snow | Kestrel's finer rain and snow textures (`MixinEntityRendererWeather`); the amount, area and timing of weather are vanilla's. Off by default. |
+| Refined rain and snow | Night's finer rain and snow textures (`MixinEntityRendererWeather`); the amount, area and timing of weather are vanilla's. Off by default. |
 
 Tracking is bounded (48 projectile trails, 16 spark bursts, 64 orbs) and trail buffers are
 pooled, so nothing grows with the number of projectiles.

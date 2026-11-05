@@ -1,4 +1,4 @@
-# Shared helpers for Kestrel build scripts. Dot-source this file.
+# Shared helpers for Night Launcher build scripts. Dot-source this file.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

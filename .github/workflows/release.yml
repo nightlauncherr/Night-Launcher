@@ -1,4 +1,4 @@
-# Builds, tests, signs and publishes a Kestrel release on GitHub's Windows runners.
+# Builds, tests, signs and publishes a Night Launcher release on GitHub's Windows runners.
 #
 # Runs on every push to main (and on demand). It publishes only when the version in
 # launcher/Cargo.toml has no GitHub release yet and notes/<version>.md exists, so a
@@ -56,7 +56,7 @@ jobs:
             exit 0
           }
           if (-not (Test-Path "notes\$version.md")) { throw "notes\$version.md is missing; write the release notes for $version first." }
-          Write-Host "Publishing Kestrel $version."
+          Write-Host "Publishing Night Launcher $version."
           "publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 

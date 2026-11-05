@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds, signs and publishes a Kestrel release on GitHub.
+  Builds, signs and publishes a Night Launcher release on GitHub.
 .DESCRIPTION
   Refuses to publish unless every step succeeds:
   1. Signing key present and matching launcher\update-public-key.txt.
@@ -11,7 +11,7 @@
      confirms the exe embeds this repository and this public key).
   5. Signs release\kestrel-update.json and verifies it against the public key
      compiled into the launcher and against the exe's SHA-256.
-  6. Creates GitHub release v<version> (marked Latest) with Kestrel.exe and
+  6. Creates GitHub release v<version> (marked Latest) with NightLauncher.exe and
      kestrel-update.json via the GitHub CLI (gh).
   Installed launchers see the update the next time they start.
 .EXAMPLE
@@ -82,15 +82,15 @@ if ($exists) { throw "Release $tag already exists in $($update.Repo). Bump the v
 $releaseArgs = @()
 if ($SkipTests) { $releaseArgs += '-SkipTests' }
 & (Join-Path $PSScriptRoot 'release.ps1') @releaseArgs
-$exe = Join-Path $Root 'release\Kestrel.exe'
-if (-not (Test-Path $exe)) { throw 'release.ps1 did not produce release\Kestrel.exe' }
+$exe = Join-Path $Root 'release\NightLauncher.exe'
+if (-not (Test-Path $exe)) { throw 'release.ps1 did not produce release\NightLauncher.exe' }
 # The build must not have changed tracked files (e.g. Cargo.lock).
 if ((Assert-CleanPushedMain) -ne $commit) { throw 'the checkout changed during the build' }
 
 # 5. Sign and verify.
 Write-Step "Signing manifest for $version"
 $manifest = Join-Path $Root 'release\kestrel-update.json'
-$url = "https://github.com/$($update.Repo)/releases/download/$tag/Kestrel.exe"
+$url = "https://github.com/$($update.Repo)/releases/download/$tag/NightLauncher.exe"
 $published = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $signArgs = @('sign', '--key', $keyPath, '--exe', $exe, '--version', $version, '--url', $url,
     '--notes', $notesPath, '--published', $published, '--manifest-url', $update.ManifestUrl, '--out', $manifest)
@@ -102,7 +102,7 @@ Write-Ok 'manifest signed and verified with the public key built into the launch
 # 6. Publish.
 Write-Step "Creating GitHub release $tag in $($update.Repo) at $commit"
 $ghArgs = @('release', 'create', $tag, $exe, $manifest, '--repo', $update.Repo, '--target', $commit,
-    '--title', "Kestrel $version", '--notes-file', $notesPath)
+    '--title', "Night Launcher $version", '--notes-file', $notesPath)
 # Must become the "Latest" release: launchers read releases/latest.
 if ($Draft) { $ghArgs += '--draft' } else { $ghArgs += '--latest' }
 Invoke-Native 'gh' $ghArgs

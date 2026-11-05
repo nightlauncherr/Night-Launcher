@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Checks (and optionally installs) everything needed to build Kestrel on Windows.
+  Checks (and optionally installs) everything needed to build Night Launcher on Windows.
 .DESCRIPTION
   Required:
     - Rust (rustup, stable, MSVC toolchain)       -> launcher
@@ -13,7 +13,7 @@
 param([switch]$Yes)
 . (Join-Path $PSScriptRoot 'common.ps1')
 
-if ($env:OS -ne 'Windows_NT') { throw 'Kestrel targets Windows; run this on Windows.' }
+if ($env:OS -ne 'Windows_NT') { throw 'Night Launcher targets Windows; run this on Windows.' }
 
 function Confirm-Install([string]$what) {
     if ($Yes) { return $true }

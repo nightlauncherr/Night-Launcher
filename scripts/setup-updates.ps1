@@ -8,7 +8,7 @@
      the existing one.
   3. Writes the PUBLIC key to launcher\update-public-key.txt and the GitHub
      repository to release.json. Both are safe to commit.
-  Every Kestrel.exe built afterwards with scripts\release.ps1 checks
+  Every NightLauncher.exe built afterwards with scripts\release.ps1 checks
   https://github.com/<repo>/releases/latest for updates and only accepts
   releases signed with this key.
 
@@ -54,4 +54,4 @@ Write-Host 'Next steps:' -ForegroundColor Green
 Write-Host "  1. Back up $keyPath somewhere safe (password manager / USB stick). Never commit or share it."
 Write-Host "  2. Make sure https://github.com/$Repo exists and is PUBLIC (launchers download releases anonymously)."
 Write-Host '  3. Build an update-enabled launcher:  powershell -ExecutionPolicy Bypass -File scripts\release.ps1'
-Write-Host '  4. Replace your Kestrel.exe with release\Kestrel.exe once. Future versions arrive through the launcher.'
+Write-Host '  4. Replace your NightLauncher.exe with release\NightLauncher.exe once. Future versions arrive through the launcher.'

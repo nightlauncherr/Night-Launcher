@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Produces the standalone release: release\Kestrel.exe (one file).
+  Produces the standalone release: release\NightLauncher.exe (one file).
 .DESCRIPTION
   1. Runs the launcher and mod tests (skip with -SkipTests).
   2. Builds the Forge client mod (Gradle).
@@ -9,8 +9,8 @@
   4. Copies the exe to a temporary folder outside the project and runs its
      built-in self-check there with a throw-away data directory.
   5. Checks the exe's DLL imports (when dumpbin is available).
-  6. Leaves only Kestrel.exe (+ a SHA-256 text file) in release\.
-  Minecraft, Forge and Java 8 are NOT bundled: Kestrel downloads them from the
+  6. Leaves only NightLauncher.exe (+ a SHA-256 text file) in release\.
+  Minecraft, Forge and Java 8 are NOT bundled: Night Launcher downloads them from the
   official servers into %LOCALAPPDATA%\Kestrel on first launch.
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\release.ps1
@@ -53,7 +53,7 @@ if (-not (Test-Path $jar)) { throw "expected mod jar not found: $jar" }
 Write-Ok "$jar ($([math]::Round((Get-Item $jar).Length / 1KB)) KB)"
 
 # 3. Launcher with everything embedded
-Write-Step 'Building Kestrel.exe (release, mod + resources embedded, static CRT)'
+Write-Step 'Building NightLauncher.exe (release, mod + resources embedded, static CRT)'
 $env:KESTREL_EMBED_MOD_JAR = (Resolve-Path $jar).Path
 if ($update) {
     $env:KESTREL_UPDATE_MANIFEST_URL = $update.ManifestUrl
@@ -72,13 +72,13 @@ Write-Step 'Self-check of the packaged exe outside the project folder'
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("kestrel-release-check-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
-    Copy-Item $built (Join-Path $tmp 'Kestrel.exe')
+    Copy-Item $built (Join-Path $tmp 'NightLauncher.exe')
     $report = Join-Path $tmp 'self-check.txt'
-    $p = Start-Process -FilePath (Join-Path $tmp 'Kestrel.exe') -ArgumentList @('--self-check', "`"$report`"", '--root', "`"$(Join-Path $tmp 'data')`"") -WorkingDirectory $tmp -Wait -PassThru -WindowStyle Hidden
+    $p = Start-Process -FilePath (Join-Path $tmp 'NightLauncher.exe') -ArgumentList @('--self-check', "`"$report`"", '--root', "`"$(Join-Path $tmp 'data')`"") -WorkingDirectory $tmp -Wait -PassThru -WindowStyle Hidden
     if (Test-Path $report) { Get-Content $report | ForEach-Object { Write-Host "    $_" } }
     if ($p.ExitCode -ne 0) { throw "self-check failed (exit code $($p.ExitCode))" }
     $reportText = if (Test-Path $report) { Get-Content $report -Raw } else { '' }
-    if ($reportText -notmatch "PASS  version: Kestrel $([regex]::Escape($version)) ") {
+    if ($reportText -notmatch "PASS  version: Night Launcher $([regex]::Escape($version)) ") {
         throw "self-check does not report version $version"
     }
     # The exe must contain exactly the update source configured in this checkout,
@@ -113,7 +113,7 @@ if ($vswhere) {
         $deps = & $dumpbin.FullName /nologo /dependents $built | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim() }
         $bad = $deps | Where-Object { $_ -match '^(vcruntime|msvcp|ucrtbase|api-ms-win-crt)' }
         Write-Ok ("imports: " + ($deps -join ', '))
-        if ($bad) { throw "Kestrel.exe still needs the Visual C++ runtime: $($bad -join ', ')" }
+        if ($bad) { throw "NightLauncher.exe still needs the Visual C++ runtime: $($bad -join ', ')" }
         Write-Ok 'no Visual C++ redistributable required'
     }
 }
@@ -122,10 +122,10 @@ if ($vswhere) {
 Write-Step 'Writing release folder'
 if (Test-Path $ReleaseDir) { Remove-Item -Recurse -Force $ReleaseDir }
 New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
-$exe = Join-Path $ReleaseDir 'Kestrel.exe'
+$exe = Join-Path $ReleaseDir 'NightLauncher.exe'
 Copy-Item $built $exe
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
-Set-Content -Path (Join-Path $ReleaseDir 'Kestrel.exe.sha256.txt') -Value "$hash  Kestrel.exe" -Encoding ascii
+Set-Content -Path (Join-Path $ReleaseDir 'NightLauncher.exe.sha256.txt') -Value "$hash  NightLauncher.exe" -Encoding ascii
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 2)
 
 Write-Host ''
@@ -136,5 +136,5 @@ Write-Host "  Size:    $sizeMb MB"
 Write-Host "  SHA-256: $hash"
 Write-Host "  Updates: $(if ($update) { "enabled ($($update.Repo), key $($update.KeyId))" } else { 'not configured' })"
 Write-Host "  Log:     $logFile"
-Write-Host "Copy Kestrel.exe anywhere (Desktop, another PC) and run it. Game files go to %LOCALAPPDATA%\Kestrel."
+Write-Host "Copy NightLauncher.exe anywhere (Desktop, another PC) and run it. Game files go to %LOCALAPPDATA%\Kestrel."
 try { Stop-Transcript | Out-Null } catch { }
