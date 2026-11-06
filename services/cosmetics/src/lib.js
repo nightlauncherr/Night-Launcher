@@ -95,7 +95,11 @@ async function publish(request, uuidPart, env, now, fetchImpl) {
   } catch {
     return error(502, "session server unreachable");
   }
-  if (res.status !== 200) return error(403, "session not verified");
+  if (res.status !== 200) {
+    // 204: Mojang has no matching join. Anything else: Mojang refused or failed the check.
+    console.log(`hasJoined for ${name} answered ${res.status}`);
+    return error(403, `session not verified (mojang ${res.status})`);
+  }
   let profile;
   try {
     profile = await res.json();
