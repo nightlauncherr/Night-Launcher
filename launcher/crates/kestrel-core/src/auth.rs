@@ -624,14 +624,28 @@ fn read_store(path: &Path) -> AccountStore {
     }
 }
 
+/// The store as written. The active account is also mirrored into the
+/// top-level `name`/`uuid`/`refresh_token` fields of the pre-1.1 format, so an
+/// older launcher (before it updates) still finds that account instead of
+/// asking to sign in again. [`decode_store`] prefers `accounts`.
+fn encode_store(store: &AccountStore) -> Result<Vec<u8>> {
+    let mut s = store.clone();
+    s.schema = ACCOUNT_STORE_SCHEMA;
+    let mut v = serde_json::to_value(&s).map_err(|e| Error::json("accounts", e))?;
+    if let (Some(a), Some(obj)) = (s.active_account(), v.as_object_mut()) {
+        obj.insert("name".into(), a.name.clone().into());
+        obj.insert("uuid".into(), a.uuid.clone().into());
+        obj.insert("refresh_token".into(), a.refresh_token.clone().into());
+    }
+    serde_json::to_vec(&v).map_err(|e| Error::json("accounts", e))
+}
+
 fn write_store(path: &Path, store: &AccountStore) -> Result<()> {
     if !secure::is_supported() {
         log::warn!("secure storage unavailable on this platform; accounts not persisted");
         return Ok(());
     }
-    let mut s = store.clone();
-    s.schema = ACCOUNT_STORE_SCHEMA;
-    let plain = serde_json::to_vec(&s).map_err(|e| Error::json("accounts", e))?;
+    let plain = encode_store(store)?;
     let cipher = secure::protect(&plain)?;
     atomic_write(path, &cipher)
 }
@@ -787,6 +801,35 @@ mod tests {
         assert!(back.remove("a"));
         assert_eq!(back.active, None);
         assert!(!back.remove("a"));
+    }
+
+    #[test]
+    fn written_store_is_still_readable_by_pre_1_1_launchers() {
+        let mut s = AccountStore::default();
+        s.upsert(acct("A", "a"));
+        s.upsert(acct("B", "b"));
+        s.set_active("b");
+        let bytes = encode_store(&s).unwrap();
+        // What a 1.0.x launcher does: deserialize one StoredAccount, ignoring unknown fields.
+        #[derive(Deserialize)]
+        struct Old {
+            name: String,
+            uuid: String,
+            refresh_token: String,
+        }
+        let old: Old = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            (
+                old.name.as_str(),
+                old.uuid.as_str(),
+                old.refresh_token.as_str()
+            ),
+            ("B", "b", "rt-B")
+        );
+        // And this version reads the full list back.
+        let back = decode_store(&bytes).unwrap();
+        assert_eq!(back.accounts.len(), 2);
+        assert_eq!(back.active.as_deref(), Some("b"));
     }
 
     #[test]
