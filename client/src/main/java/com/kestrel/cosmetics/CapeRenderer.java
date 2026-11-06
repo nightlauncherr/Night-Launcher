@@ -22,11 +22,12 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  * so other cape mods cannot cancel it. Players who hide their cape in Skin
  * Customization are respected.
  *
- * <p>Official capes: on <b>your own</b> player the Kestrel cape you equipped
- * replaces your official Minecraft cape (see {@link #hidesOfficialCape}), since
- * almost every Java account owns an official cape now and the Kestrel one
- * would otherwise never be visible. On other players an official cape still
- * wins over a catalog-assigned one. Either way only one cape is drawn.
+ * <p>Official capes: the Night cape a player chose replaces their official
+ * Minecraft cape (see {@link #hidesOfficialCape}): your equipped cape on your
+ * player, and the cape another Night player shares on theirs. A cape the
+ * bundled catalog assigns does not override an official cape. Either way only
+ * one cape is drawn. Official cape ownership never decides whether a Night
+ * cape can be drawn.
  */
 public final class CapeRenderer {
     private final KestrelClient client;
@@ -121,7 +122,9 @@ public final class CapeRenderer {
         KestrelClient c = KestrelMod.client();
         if (c == null || c.capes() == null) return false;
         Minecraft mc = Minecraft.getMinecraft();
-        return player == mc.thePlayer && c.capes().currentTexture() != null;
+        if (player == mc.thePlayer) return c.capes().currentTexture() != null;
+        // Another Night player's chosen cape replaces their official one too, as on their own screen.
+        return c.capes().sharedTexture(player.getUniqueID()) != null;
     }
 
     /**

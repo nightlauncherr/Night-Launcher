@@ -130,6 +130,7 @@ public final class CapeManager {
     private final File customDir;
     private final CapeCatalog catalog;
     private final MojangCapes mojang;
+    private final CapeSync sync;
     /** Cache of downloaded Mojang cape textures (shared with the launcher). */
     private final File mojangDir;
     private final Map<String, Loaded> cache = new HashMap<String, Loaded>();
@@ -147,6 +148,12 @@ public final class CapeManager {
         this.catalog = loadCatalog();
         this.mojang = loadMojangCapes();
         this.mojangDir = new File(customDir.getParentFile(), "mojang-capes");
+        this.sync = new CapeSync(client);
+    }
+
+    /** Cape sharing between Night players. */
+    public CapeSync sync() {
+        return sync;
     }
 
     private static MojangCapes loadMojangCapes() {
@@ -277,6 +284,7 @@ public final class CapeManager {
             if (budget == 0) break;
         }
         ensureLoaded(); // frees capes of players no longer in view (a few map entries at most)
+        sync.tick();
     }
 
     // ---- what to draw -------------------------------------------------------
@@ -304,8 +312,26 @@ public final class CapeManager {
     public ResourceLocation assignedTexture(UUID player) {
         ClientConfig.Cosmetics c = client.config().cosmetics;
         if (!c.showAssignedCapes) return null;
+        ResourceLocation shared = sharedTexture(player);
+        if (shared != null) return shared;
         CapeCatalog.Entry e = catalog.assignedTo(player);
         return e == null ? null : frame(e.id, true);
+    }
+
+    /**
+     * Current frame of the cape another Night player shares (cosmetics
+     * service), or null. Only ids this client knows are drawn: built-in capes
+     * the player may wear, and Mojang catalog capes.
+     */
+    public ResourceLocation sharedTexture(UUID player) {
+        if (!client.config().cosmetics.showAssignedCapes) return null;
+        String id = sync.capeOf(player);
+        if (id == null) return null;
+        if (id.startsWith(MojangCapes.PREFIX)) {
+            return mojang.bySelection(id) != null ? frame(id, true) : null;
+        }
+        CapeCatalog.Entry e = catalog.get(id);
+        return e != null && e.allows(player.toString()) ? frame(e.id, true) : null;
     }
 
     /**

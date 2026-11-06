@@ -1,0 +1,10 @@
+# Night cosmetics service (Cloudflare Workers). See README.md for setup.
+name = "night-cosmetics"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Create the namespace once with:  npx wrangler kv namespace create CAPES
+# then paste the id it prints here.
+[[kv_namespaces]]
+binding = "CAPES"
+id = "PASTE_KV_NAMESPACE_ID_HERE"

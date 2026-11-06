@@ -95,8 +95,13 @@ public final class ClientConfig {
         /** Cape id: "none", a catalog id (capes.json), or "custom:<file name>" (PNG or GIF). */
         public String cape = "none";
         public boolean animatedCapes = true;
-        /** Draw capes the bundled catalog assigns to specific players (by UUID) on those players. */
+        /**
+         * Draw other players' Night capes: the cape each Night player shares
+         * (cosmetics service) and capes the bundled catalog assigns by UUID.
+         */
         public boolean showAssignedCapes = true;
+        /** Publish your equipped built-in or Mojang cape so other Night players see it. */
+        public boolean shareCape = true;
         /** Frames per second for animated capes. */
         public int animationFps = 10;
 

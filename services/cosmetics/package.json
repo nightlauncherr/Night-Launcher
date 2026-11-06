@@ -1,0 +1,9 @@
+{
+  "name": "night-cosmetics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/index.test.js",
+    "deploy": "wrangler deploy"
+  }
+}

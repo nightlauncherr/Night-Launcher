@@ -279,10 +279,19 @@ public final class ClientSettingsScreen extends GuiScreen {
                     changed();
                 }));
                 content.add(intSlider("Animation FPS (PNG strips)", 1, 30, () -> co.animationFps, v -> co.animationFps = v));
-                content.add(new Toggle("Show players' assigned capes", () -> co.showAssignedCapes, v -> {
+                content.add(new Toggle("Show other Night players' capes", () -> co.showAssignedCapes, v -> {
                     co.showAssignedCapes = v;
                     changed();
                 }));
+                content.add(new Toggle("Share my cape with Night players", () -> co.shareCape, v -> {
+                    co.shareCape = v;
+                    changed();
+                }));
+                text(client.capes().sync().enabled()
+                        ? "Sharing: other Night players see your built-in or Mojang cape (uploaded capes stay on your PC). "
+                                + "Your account is verified through Mojang's session server, the same check servers use; "
+                                + "your login token is never sent to Night."
+                        : "Cape sharing is not set up in this build: capes are shown on your PC only.");
                 content.add(new ActionButton("Open custom capes folder", false, () -> openFolder(client.capes().customDir())));
                 text("Custom capes: PNG, 64x32 (or HD multiples like 128x64), max 2 MB; animated PNGs stack frames vertically. "
                         + "GIFs (max 4 MB) play with their own timing: a 2:1 GIF is used as a cape sheet, any other GIF is fitted onto both sides. "

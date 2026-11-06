@@ -756,7 +756,7 @@ impl CosmeticsPage {
                 ui.checkbox(&mut self.settings.cosmetics.animated_capes, "Animate");
                 ui.checkbox(
                     &mut self.settings.cosmetics.show_assigned_capes,
-                    "Show players' assigned capes",
+                    "Show other Night players' capes",
                 );
             });
             ui.label(
