@@ -47,6 +47,11 @@ pub enum Error {
     #[error("authentication failed: {0}")]
     Auth(String),
 
+    /// The saved Microsoft sign-in no longer works (expired or revoked):
+    /// the user must sign in to that account again.
+    #[error("the Microsoft sign-in for {0} has expired or was revoked; sign in to it again")]
+    SessionExpired(String),
+
     #[error("launch failed: {0}")]
     Launch(String),
 

@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use kestrel_core::auth::Session;
-use kestrel_core::config::LauncherConfig;
 use kestrel_core::download::validate_url;
 use kestrel_core::install::{INSTALL_SCHEMA, InstallState};
 use kestrel_core::mojang::{self, Platform, VersionManifest};
@@ -148,7 +147,7 @@ fn forge_profile_merges_and_launches() {
     let spec = launch::build(
         &state,
         &Session::offline("Kellen"),
-        &LauncherConfig::default(),
+        &kestrel_core::instances::GameSettings::default(),
         Path::new("java"),
         &layout,
         &Platform::windows_x64(),

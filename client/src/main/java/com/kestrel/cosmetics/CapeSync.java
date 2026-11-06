@@ -88,6 +88,8 @@ public final class CapeSync {
     private String certificateOwner;
 
     private volatile String published; // last cape the service accepted for this session
+    /** Bumped when the in-game account switcher changes the session. */
+    private volatile int sessionGeneration;
     private volatile boolean publishRunning;
     private String wanted;
     private long wantedSinceMs;
@@ -147,10 +149,12 @@ public final class CapeSync {
         }
         publishRunning = true;
         final String cape = want;
+        final int generation = sessionGeneration;
         net.execute(() -> {
             try {
                 publish(session, cape);
-                published = cape;
+                // A publish for the previous account must not count for the new one.
+                if (generation == sessionGeneration) published = cape;
                 nextPublishMs = 0;
                 KestrelMod.LOG.info("[Kestrel] cape sharing: published {}", cape);
                 // Read it back through the lookup path other players use (diagnostics).
@@ -171,6 +175,14 @@ public final class CapeSync {
                 publishRunning = false;
             }
         });
+    }
+
+    /** The account changed: publish the cape again for the new one. Game thread. */
+    void onSessionChanged() {
+        sessionGeneration++;
+        published = null;
+        wanted = null;
+        nextPublishMs = 0;
     }
 
     private static boolean onlineSession(Session s) {

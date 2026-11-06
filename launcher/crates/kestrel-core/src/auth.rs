@@ -149,12 +149,93 @@ impl Session {
     }
 }
 
-/// What is persisted (DPAPI-encrypted) between launches.
+/// One saved Microsoft account (persisted DPAPI-encrypted in the
+/// [`AccountStore`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredAccount {
     pub name: String,
     pub uuid: String,
     pub refresh_token: String,
+    /// Set when the refresh token stopped working; cleared by signing in again.
+    #[serde(default)]
+    pub needs_sign_in: bool,
+}
+
+impl StoredAccount {
+    /// The parts that are safe to show and to pass around the UI.
+    pub fn summary(&self) -> AccountSummary {
+        AccountSummary {
+            name: self.name.clone(),
+            uuid: self.uuid.clone(),
+            needs_sign_in: self.needs_sign_in,
+        }
+    }
+}
+
+/// An account without its credentials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountSummary {
+    pub name: String,
+    pub uuid: String,
+    pub needs_sign_in: bool,
+}
+
+/// Every saved account and which one is active. The whole store is one
+/// DPAPI-encrypted file (`accounts.dat`); launchers before 1.1 stored a single
+/// [`StoredAccount`] there, which [`load_store`] still reads.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AccountStore {
+    pub schema: u32,
+    /// UUID of the active account.
+    pub active: Option<String>,
+    pub accounts: Vec<StoredAccount>,
+}
+
+pub const ACCOUNT_STORE_SCHEMA: u32 = 2;
+
+impl AccountStore {
+    pub fn get(&self, uuid: &str) -> Option<&StoredAccount> {
+        self.accounts.iter().find(|a| a.uuid == uuid)
+    }
+
+    pub fn active_account(&self) -> Option<&StoredAccount> {
+        self.active.as_deref().and_then(|u| self.get(u))
+    }
+
+    pub fn summaries(&self) -> Vec<AccountSummary> {
+        self.accounts.iter().map(StoredAccount::summary).collect()
+    }
+
+    /// Add the account, or update it in place (same UUID) keeping its position.
+    pub fn upsert(&mut self, acct: StoredAccount) {
+        match self.accounts.iter_mut().find(|a| a.uuid == acct.uuid) {
+            Some(a) => *a = acct,
+            None => self.accounts.push(acct),
+        }
+        if self.active_account().is_none() {
+            self.active = self.accounts.first().map(|a| a.uuid.clone());
+        }
+    }
+
+    /// Make a saved account active. Returns false if it isn't saved.
+    pub fn set_active(&mut self, uuid: &str) -> bool {
+        if self.get(uuid).is_some() {
+            self.active = Some(uuid.to_string());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Remove an account; if it was active, the first remaining one becomes active.
+    pub fn remove(&mut self, uuid: &str) -> bool {
+        let before = self.accounts.len();
+        self.accounts.retain(|a| a.uuid != uuid);
+        if self.active.as_deref() == Some(uuid) || self.active_account().is_none() {
+            self.active = self.accounts.first().map(|a| a.uuid.clone());
+        }
+        self.accounts.len() != before
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -475,37 +556,173 @@ fn http_err(url: &str, e: ureq::Error) -> Error {
 
 // ---- persistence -----------------------------------------------------------
 
-/// Save the account encrypted with DPAPI. On platforms without secure
-/// storage nothing is written (the user signs in each session).
-pub fn save_account(path: &Path, acct: &StoredAccount) -> Result<()> {
+/// Serialises every read-modify-write of the account store within this
+/// process. Held only around file access, never across network calls, so the
+/// UI thread can take it.
+static STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Serialises refreshes. Refresh tokens rotate on use, so two launches
+/// refreshing the same account must not race (the loser would save a token
+/// Microsoft already replaced). Held across the network exchange.
+static REFRESH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn store_guard() -> std::sync::MutexGuard<'static, ()> {
+    // A panic while holding the lock leaves nothing half-written (writes are atomic).
+    STORE_LOCK.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Decode a decrypted store: the current format, or a pre-1.1 single account.
+fn decode_store(plain: &[u8]) -> Result<AccountStore> {
+    let v: serde_json::Value =
+        serde_json::from_slice(plain).map_err(|e| Error::json("accounts", e))?;
+    if v.get("accounts").is_some() {
+        let mut s: AccountStore =
+            serde_json::from_value(v).map_err(|e| Error::json("accounts", e))?;
+        // Drop duplicate UUIDs (first wins) and a dangling active marker.
+        let mut seen = std::collections::HashSet::new();
+        s.accounts.retain(|a| seen.insert(a.uuid.clone()));
+        if s.active_account().is_none() {
+            s.active = s.accounts.first().map(|a| a.uuid.clone());
+        }
+        Ok(s)
+    } else {
+        let a: StoredAccount = serde_json::from_value(v).map_err(|e| Error::json("account", e))?;
+        Ok(AccountStore {
+            schema: ACCOUNT_STORE_SCHEMA,
+            active: Some(a.uuid.clone()),
+            accounts: vec![a],
+        })
+    }
+}
+
+fn read_store(path: &Path) -> AccountStore {
+    let cipher = match std::fs::read(path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return AccountStore::default(),
+        Err(e) => {
+            log::warn!("cannot read saved accounts ({e})");
+            return AccountStore::default();
+        }
+    };
+    match secure::unprotect(&cipher).and_then(|p| decode_store(&p)) {
+        Ok(s) => {
+            for a in &s.accounts {
+                redact::register(&a.refresh_token);
+            }
+            s
+        }
+        Err(e) => {
+            // Keep the unreadable file (another Windows user's, or damaged)
+            // instead of overwriting it on the next save.
+            let keep = path.with_extension(format!("dat.unreadable-{}", now_secs()));
+            log::warn!(
+                "saved accounts unreadable ({e}); kept as {} — sign in again",
+                keep.display()
+            );
+            let _ = std::fs::rename(path, &keep);
+            AccountStore::default()
+        }
+    }
+}
+
+fn write_store(path: &Path, store: &AccountStore) -> Result<()> {
     if !secure::is_supported() {
-        log::warn!("secure storage unavailable on this platform; account not persisted");
+        log::warn!("secure storage unavailable on this platform; accounts not persisted");
         return Ok(());
     }
-    let plain = serde_json::to_vec(acct).map_err(|e| Error::json("account", e))?;
+    let mut s = store.clone();
+    s.schema = ACCOUNT_STORE_SCHEMA;
+    let plain = serde_json::to_vec(&s).map_err(|e| Error::json("accounts", e))?;
     let cipher = secure::protect(&plain)?;
     atomic_write(path, &cipher)
 }
 
-pub fn load_account(path: &Path) -> Option<StoredAccount> {
-    let cipher = std::fs::read(path).ok()?;
-    match secure::unprotect(&cipher)
-        .and_then(|p| serde_json::from_slice(&p).map_err(|e| Error::json("account", e)))
-    {
-        Ok(a) => {
-            let a: StoredAccount = a;
-            redact::register(&a.refresh_token);
-            Some(a)
-        }
-        Err(e) => {
-            log::warn!("stored account unreadable ({e}); sign in again");
-            None
-        }
-    }
+/// The saved accounts (empty when none, or when the file can't be read).
+pub fn load_store(path: &Path) -> AccountStore {
+    let _g = store_guard();
+    read_store(path)
 }
 
-pub fn forget_account(path: &Path) {
-    let _ = std::fs::remove_file(path);
+/// Read, change and save the store as one step. The store is re-read from
+/// disk first, so changes made elsewhere in this process are kept.
+pub fn update_store<R>(
+    path: &Path,
+    f: impl FnOnce(&mut AccountStore) -> R,
+) -> Result<(R, AccountStore)> {
+    let _g = store_guard();
+    let mut s = read_store(path);
+    let r = f(&mut s);
+    write_store(path, &s)?;
+    Ok((r, s))
+}
+
+/// Save a newly signed-in account (or a fresh sign-in of a saved one) and
+/// make it active.
+pub fn add_account(path: &Path, acct: StoredAccount) -> Result<AccountStore> {
+    let uuid = acct.uuid.clone();
+    update_store(path, move |s| {
+        s.upsert(StoredAccount {
+            needs_sign_in: false,
+            ..acct
+        });
+        s.set_active(&uuid);
+    })
+    .map(|(_, s)| s)
+}
+
+/// Refresh a saved account and turn it into a launchable session. The store
+/// lock is held for the whole exchange so concurrent launches of the same
+/// account can't race on the rotating refresh token. On an expired or revoked
+/// sign-in the account is marked [`StoredAccount::needs_sign_in`] and
+/// [`Error::SessionExpired`] is returned; nothing else in the store changes.
+pub fn refresh_session(
+    client_id: &str,
+    path: &Path,
+    uuid: &str,
+) -> Result<(Session, StoredAccount)> {
+    let _refreshing = REFRESH_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let acct = load_store(path)
+        .get(uuid)
+        .cloned()
+        .ok_or_else(|| Error::Auth("that account is no longer saved; add it again".into()))?;
+    let a = Authenticator::new(client_id)?;
+    let (ms, refresh) = match a.refresh(&acct.refresh_token) {
+        Ok(t) => t,
+        Err(Error::Auth(m)) if m.starts_with("session expired") => {
+            log::warn!("refresh failed for {}: {m}", acct.name);
+            update_store(path, |s| {
+                if let Some(x) = s.accounts.iter_mut().find(|x| x.uuid == uuid) {
+                    x.needs_sign_in = true;
+                }
+            })?;
+            return Err(Error::SessionExpired(acct.name));
+        }
+        Err(e) => return Err(e),
+    };
+    redact::register(&refresh);
+    let session = a.minecraft_session(&ms)?;
+    if session.uuid != acct.uuid {
+        // The refresh token belongs to a different Minecraft profile than the one
+        // saved under this entry: never launch as someone else.
+        return Err(Error::Auth(format!(
+            "the saved sign-in for {} now belongs to another Minecraft profile ({}); sign in again",
+            acct.name, session.name
+        )));
+    }
+    let updated = StoredAccount {
+        name: session.name.clone(),
+        uuid: session.uuid.clone(),
+        refresh_token: refresh,
+        needs_sign_in: false,
+    };
+    let saved = updated.clone();
+    // Only this account's entry changes; it is skipped if the account was
+    // removed meanwhile (removing must win over a background refresh).
+    update_store(path, move |s| {
+        if let Some(x) = s.accounts.iter_mut().find(|x| x.uuid == saved.uuid) {
+            *x = saved;
+        }
+    })?;
+    Ok((session, updated))
 }
 
 /// Seconds since the Unix epoch (for logs/UI).
@@ -519,6 +736,81 @@ pub fn now_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn acct(name: &str, uuid: &str) -> StoredAccount {
+        StoredAccount {
+            name: name.into(),
+            uuid: uuid.into(),
+            refresh_token: format!("rt-{name}"),
+            needs_sign_in: false,
+        }
+    }
+
+    #[test]
+    fn pre_1_1_single_account_becomes_the_active_one() {
+        let s = decode_store(br#"{"name":"Bringing","uuid":"ba14","refresh_token":"x"}"#).unwrap();
+        assert_eq!(s.accounts.len(), 1);
+        assert_eq!(s.active.as_deref(), Some("ba14"));
+        assert_eq!(s.active_account().unwrap().name, "Bringing");
+        assert!(!s.accounts[0].needs_sign_in);
+    }
+
+    #[test]
+    fn store_roundtrip_and_cleanup() {
+        let mut s = AccountStore::default();
+        s.upsert(acct("A", "a"));
+        s.upsert(acct("B", "b"));
+        assert_eq!(s.active.as_deref(), Some("a")); // first added becomes active
+        assert!(s.set_active("b"));
+        assert!(!s.set_active("zzz"));
+        // Updating keeps position and the active marker.
+        s.upsert(StoredAccount {
+            name: "B2".into(),
+            ..acct("B", "b")
+        });
+        assert_eq!(
+            s.summaries()
+                .iter()
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>(),
+            ["A", "B2"]
+        );
+        assert_eq!(s.active.as_deref(), Some("b"));
+        let json = serde_json::to_vec(&s).unwrap();
+        let back = decode_store(&json).unwrap();
+        assert_eq!(back.active.as_deref(), Some("b"));
+        assert_eq!(back.accounts.len(), 2);
+        // Removing the active account activates the next one.
+        let mut back = back;
+        assert!(back.remove("b"));
+        assert_eq!(back.active.as_deref(), Some("a"));
+        assert!(back.remove("a"));
+        assert_eq!(back.active, None);
+        assert!(!back.remove("a"));
+    }
+
+    #[test]
+    fn store_drops_duplicates_and_dangling_active() {
+        let s = decode_store(
+            br#"{"schema":2,"active":"gone","accounts":[
+                {"name":"A","uuid":"a","refresh_token":"1"},
+                {"name":"A-dup","uuid":"a","refresh_token":"2"},
+                {"name":"B","uuid":"b","refresh_token":"3","needs_sign_in":true}]}"#,
+        )
+        .unwrap();
+        assert_eq!(s.accounts.len(), 2);
+        assert_eq!(s.accounts[0].refresh_token, "1");
+        assert_eq!(s.active.as_deref(), Some("a"));
+        assert!(s.get("b").unwrap().needs_sign_in);
+        assert!(decode_store(b"[1,2]").is_err());
+    }
+
+    #[test]
+    fn summaries_carry_no_credentials() {
+        let a = acct("A", "a");
+        let dbg = format!("{:?}", a.summary());
+        assert!(!dbg.contains("rt-A"));
+    }
 
     #[test]
     fn offline_uuid_matches_vanilla() {

@@ -2,13 +2,13 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::Sender;
 
 use crate::auth::Session;
-use crate::config::LauncherConfig;
 use crate::error::{Error, IoContext, Result};
 use crate::install::InstallState;
+use crate::instances::GameSettings;
 use crate::mojang::Platform;
 use crate::paths::Layout;
 use crate::redact::redact;
@@ -21,6 +21,54 @@ pub const FORGE_MARKER: &str = "Forge Mod Loader version";
 /// whenever the player's situation changes (`ActivityReporter.java`). The
 /// per-launch token keeps chat messages from spoofing the state.
 pub const ACTIVITY_MARKER: &str = "[Kestrel] activity ";
+/// The mod prints `[Kestrel] request <token> <n> <verb> [arg]` to ask the
+/// launcher for something (the in-game account switcher, `AccountBridge.java`).
+/// Replies go to the game's stdin as one JSON object per line, tagged `"re": n`.
+pub const REQUEST_MARKER: &str = "[Kestrel] request ";
+
+/// What the game can ask the launcher.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GameRequest {
+    /// The saved accounts (names, UUIDs; never credentials).
+    Accounts,
+    /// A fresh session for this saved account (Minecraft UUID, 32 hex).
+    Switch(String),
+    /// Sign in another Microsoft account (device code shown in game).
+    Add,
+    /// Stop a pending request (an unfinished Add).
+    Cancel(u32),
+}
+
+/// Parse a request line carrying this launch's token. Anything malformed,
+/// or without the exact token (chat quoting the marker), is ignored.
+pub fn parse_request(line: &str, token: &str) -> Option<(u32, GameRequest)> {
+    if token.is_empty() {
+        return None;
+    }
+    let needle = format!("{REQUEST_MARKER}{token} ");
+    let rest = &line[line.find(&needle)? + needle.len()..];
+    let mut parts = rest.split_whitespace();
+    let n = parts.next()?;
+    if n.is_empty() || n.len() > 9 || !n.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let n: u32 = n.parse().ok()?;
+    let req = match (parts.next()?, parts.next()) {
+        ("accounts", None) => GameRequest::Accounts,
+        ("add", None) => GameRequest::Add,
+        ("switch", Some(u)) if u.len() == 32 && u.bytes().all(|b| b.is_ascii_hexdigit()) => {
+            GameRequest::Switch(u.to_ascii_lowercase())
+        }
+        ("cancel", Some(c)) if c.len() <= 9 && c.bytes().all(|b| b.is_ascii_digit()) => {
+            GameRequest::Cancel(c.parse().ok()?)
+        }
+        _ => return None,
+    };
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((n, req))
+}
 
 #[derive(Debug, Clone)]
 pub struct LaunchSpec {
@@ -107,7 +155,7 @@ pub const DEFAULT_JVM_ARGS: &[&str] = &[
 pub fn build(
     state: &InstallState,
     session: &Session,
-    cfg: &LauncherConfig,
+    cfg: &GameSettings,
     java: &Path,
     layout: &Layout,
     platform: &Platform,
@@ -202,12 +250,15 @@ pub enum GameEvent {
     ForgeLoaded,
     ModReady,
     Activity(GameActivity),
+    Request(u32, GameRequest),
     Exited(Option<i32>),
 }
 
 pub struct RunningGame {
     pub child: Child,
     pub log_path: PathBuf,
+    /// The game's stdin: the launcher's reply channel (see [`REQUEST_MARKER`]).
+    pub stdin: Option<ChildStdin>,
 }
 
 /// Spawn the game. Output is redacted, written to `logs/latest.log` (plus a
@@ -220,14 +271,14 @@ pub fn spawn(spec: &LaunchSpec, layout: &Layout, events: Sender<GameEvent>) -> R
         )));
     }
     std::fs::create_dir_all(&spec.cwd).at(&spec.cwd)?;
-    let logs = layout.logs();
+    let logs = layout.game_logs();
     std::fs::create_dir_all(&logs).at(&logs)?;
     let log_path = logs.join(format!("game-{}.log", crate::auth::now_secs()));
 
     let mut cmd = Command::new(&spec.program);
     cmd.args(&spec.args)
         .current_dir(&spec.cwd)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(windows)]
@@ -261,6 +312,7 @@ pub fn spawn(spec: &LaunchSpec, layout: &Layout, events: Sender<GameEvent>) -> R
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
+    let stdin = child.stdin.take();
     for (stream, tag) in [
         (
             stdout.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
@@ -286,6 +338,7 @@ pub fn spawn(spec: &LaunchSpec, layout: &Layout, events: Sender<GameEvent>) -> R
     Ok(RunningGame {
         child,
         log_path: latest_link(&log_path, &latest),
+        stdin,
     })
 }
 
@@ -325,6 +378,11 @@ fn pump(
                 {
                     let _ = events.send(GameEvent::Activity(a));
                 }
+                if line.contains(REQUEST_MARKER)
+                    && let Some((n, r)) = parse_request(&line, activity_token)
+                {
+                    let _ = events.send(GameEvent::Request(n, r));
+                }
                 if events.send(GameEvent::Line(line)).is_err() {
                     // UI gone: keep draining so the game never blocks on a full pipe.
                     continue;
@@ -338,6 +396,46 @@ fn pump(
 mod tests {
     use super::*;
     use crate::install::INSTALL_SCHEMA;
+
+    #[test]
+    fn requests_need_the_token_and_a_valid_shape() {
+        let t = "0123456789abcdef0123456789abcdef";
+        let u = "BA14933EA7AD48168696A788CC1B3C1F";
+        let line =
+            |rest: &str| format!("[12:00:00] [Client thread/INFO]: [Kestrel] request {t} {rest}");
+        assert_eq!(
+            parse_request(&line("1 accounts"), t),
+            Some((1, GameRequest::Accounts))
+        );
+        assert_eq!(
+            parse_request(&line("7 add"), t),
+            Some((7, GameRequest::Add))
+        );
+        assert_eq!(
+            parse_request(&line("8 cancel 7"), t),
+            Some((8, GameRequest::Cancel(7)))
+        );
+        assert_eq!(
+            parse_request(&line(&format!("2 switch {u}")), t),
+            Some((2, GameRequest::Switch(u.to_ascii_lowercase())))
+        );
+        // Wrong or missing token, bad ids, bad args, trailing junk.
+        assert_eq!(
+            parse_request(&line("1 accounts").replace(t, &"f".repeat(32)), t),
+            None
+        );
+        assert_eq!(
+            parse_request("[CHAT] [Kestrel] request 1 accounts", t),
+            None
+        );
+        assert_eq!(parse_request(&line("x accounts"), t), None);
+        assert_eq!(parse_request(&line("1234567890 accounts"), t), None);
+        assert_eq!(parse_request(&line("1 switch notauuid"), t), None);
+        assert_eq!(parse_request(&line("1 switch"), t), None);
+        assert_eq!(parse_request(&line("1 accounts extra"), t), None);
+        assert_eq!(parse_request(&line("1 delete-everything"), t), None);
+        assert_eq!(parse_request(&line("1 accounts"), ""), None);
+    }
 
     fn state() -> InstallState {
         InstallState {
@@ -369,7 +467,7 @@ mod tests {
             access_token: "tok".into(),
             user_type: "msa",
         };
-        let cfg = LauncherConfig {
+        let cfg = GameSettings {
             max_ram_mib: 2048,
             ..Default::default()
         };
@@ -414,7 +512,7 @@ mod tests {
         let r = build(
             &s,
             &Session::offline("abc"),
-            &LauncherConfig::default(),
+            &GameSettings::default(),
             Path::new("java"),
             &Layout::new("/k"),
             &Platform::windows_x64(),

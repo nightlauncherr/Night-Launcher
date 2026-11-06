@@ -204,6 +204,12 @@ public final class SkinManager {
         return profile.getId().equals(sessionId());
     }
 
+    /** Forget the cached session identity (the in-game account switcher changed it). */
+    public void onSessionChanged() {
+        sessionIdResolved = false;
+        sessionId = null;
+    }
+
     private UUID sessionId() {
         if (!sessionIdResolved) {
             sessionIdResolved = true;

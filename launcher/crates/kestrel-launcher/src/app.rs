@@ -1,12 +1,14 @@
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 
 use egui::{Color32, CornerRadius, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Vec2, pos2};
-use kestrel_core::auth::{self, DeviceCode, StoredAccount};
+use kestrel_core::auth::{self, AccountSummary, DeviceCode};
 use kestrel_core::config::{GamePreset, LauncherConfig};
 use kestrel_core::discord::{self, PresenceService};
 use kestrel_core::install::InstallState;
+use kestrel_core::instances::{self, AccountChoice, GameSettings, Instance};
 use kestrel_core::launch::{GameActivity, GameEvent};
 use kestrel_core::paths::Layout;
 use kestrel_core::progress::{Progress, SharedProgress};
@@ -21,7 +23,10 @@ use crate::qol_page::QolPage;
 use crate::skin_page::SkinPage;
 use crate::theme::{self, Kind, Tone};
 use crate::updater::{Summary, Updater};
-use crate::worker::{self, Msg, PlayRequest};
+use crate::worker::{self, GameHandle, LaunchAccount, Msg, PlayRequest};
+
+mod accounts_ui;
+mod instances_ui;
 
 // Colours shared with the section pages (see `theme` for the full palette).
 pub(crate) use crate::theme::{ACCENT, ERR, MUTED, OK, WARN};
@@ -38,6 +43,7 @@ const TOAST_SECS: f64 = 6.0;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
     Home,
+    Instances,
     Cosmetics,
     Mods,
     Settings,
@@ -47,8 +53,9 @@ enum Page {
 }
 
 impl Page {
-    const NAV: [Page; 6] = [
+    const NAV: [Page; 7] = [
         Page::Home,
+        Page::Instances,
         Page::Cosmetics,
         Page::Mods,
         Page::Settings,
@@ -59,10 +66,11 @@ impl Page {
     fn label(self) -> &'static str {
         match self {
             Page::Home => "Home",
+            Page::Instances => "Instances",
             Page::Cosmetics => "Cosmetics",
             Page::Mods => "Mods",
             Page::Settings => "Settings",
-            Page::Account => "Account",
+            Page::Account => "Accounts",
             Page::About => "About",
             Page::Logs => "Logs",
         }
@@ -71,6 +79,7 @@ impl Page {
     fn icon(self) -> Icon {
         match self {
             Page::Home => Icon::Home,
+            Page::Instances => Icon::Layers,
             Page::Cosmetics => Icon::Cosmetics,
             Page::Mods => Icon::Cube,
             Page::Settings => Icon::Settings,
@@ -83,6 +92,9 @@ impl Page {
     fn subtitle(self) -> &'static str {
         match self {
             Page::Home => "",
+            Page::Instances => {
+                "Separate Minecraft setups, each with its own mods, packs, settings, worlds and account."
+            }
             Page::Cosmetics => {
                 "Kill effects, skies, capes and your skin, shown in your Night client."
             }
@@ -90,9 +102,11 @@ impl Page {
                 "Mods, resource packs and performance presets for Night's Minecraft 1.8.9."
             }
             Page::Settings => {
-                "Game window, Java and memory, updates and advanced options. Changes save automatically."
+                "Per-instance game window, Java and memory; launcher-wide updates and advanced options. Changes save automatically."
             }
-            Page::Account => "Your Microsoft account for online servers, or offline mode.",
+            Page::Account => {
+                "Your saved Microsoft accounts. The active one plays unless an instance picks its own."
+            }
             Page::About => "Versions, where Night Launcher keeps its files, and project notes.",
             Page::Logs => "Live game output and the launcher's own log.",
         }
@@ -119,8 +133,32 @@ enum Busy {
     Idle,
     Installing,
     SigningIn,
-    Launching,
-    Running,
+}
+
+/// One instance's game: starting or running. Several can exist at once.
+struct Run {
+    progress: SharedProgress,
+    /// Set once the process has started.
+    handle: Option<GameHandle>,
+    /// Name the game plays as (once authenticated).
+    player: String,
+    forge_seen: bool,
+    mod_seen: bool,
+    started: u64,
+    activity: Option<GameActivity>,
+    stopping: bool,
+}
+
+impl Run {
+    fn running(&self) -> bool {
+        self.handle.is_some()
+    }
+
+    fn pid(&self) -> Option<u32> {
+        self.handle
+            .as_ref()
+            .and_then(|h| h.lock().ok().map(|c| c.id()))
+    }
 }
 
 enum Status {
@@ -154,14 +192,27 @@ pub struct LauncherApp {
     rx: Receiver<Msg>,
     install: Option<InstallState>,
     install_problems: Vec<String>,
-    account: Option<StoredAccount>,
+    /// Saved accounts (no credentials) and the active one's UUID.
+    accounts: Vec<AccountSummary>,
+    active_account: Option<String>,
     offline_mode: bool,
+    /// All instances (Default first); reloaded after every change.
+    instances: Vec<Instance>,
+    /// Instance shown by the Cosmetics, Mods and per-instance Settings pages.
+    editing: String,
+    /// Working copy of the edited instance's launch settings.
+    game: GameSettings,
+    game_dirty: bool,
+    runs: BTreeMap<String, Run>,
+    /// Game output per instance (kept after the game exits).
+    game_logs: HashMap<String, Vec<String>>,
+    /// Instance whose output the Logs page shows.
+    log_instance: String,
+    instances_ui: instances_ui::State,
+    accounts_ui: accounts_ui::State,
     device_code: Option<DeviceCode>,
     toasts: Vec<Toast>,
     next_toast: u64,
-    forge_seen: bool,
-    mod_seen: bool,
-    game_lines: Vec<String>,
     launcher_log: LogBuffer,
     log_tab_game: bool,
     java_probe: Option<Result<String, String>>,
@@ -174,8 +225,6 @@ pub struct LauncherApp {
     /// Discord Rich Presence (background thread; no-op until configured).
     discord: PresenceService,
     launcher_started: u64,
-    game_started: Option<u64>,
-    game_activity: Option<GameActivity>,
     /// Night Launcher mark (the in-game menu's artwork).
     mark: Option<egui::TextureHandle>,
     /// Backdrop animation clock: advances only while the ribbons are animating.
@@ -200,7 +249,8 @@ impl LauncherApp {
             .as_ref()
             .map(|s| s.quick_verify())
             .unwrap_or_default();
-        let account = auth::load_account(&layout.accounts());
+        let store = auth::load_store(&layout.accounts());
+        let instances = instances::load_all(&layout, &cfg);
         let (tx, rx) = channel();
         let layout_for_cosmetics = layout.clone();
         // Starts the background update check (never blocks start-up).
@@ -253,13 +303,20 @@ impl LauncherApp {
             rx,
             install,
             install_problems,
-            account,
+            accounts: store.summaries(),
+            active_account: store.active.clone(),
+            game: instances[0].meta.game.clone(),
+            game_dirty: false,
+            editing: instances::DEFAULT_ID.into(),
+            log_instance: instances::DEFAULT_ID.into(),
+            instances,
+            runs: BTreeMap::new(),
+            game_logs: HashMap::new(),
+            instances_ui: Default::default(),
+            accounts_ui: Default::default(),
             device_code: None,
             toasts: Vec::new(),
             next_toast: 0,
-            forge_seen: false,
-            mod_seen: false,
-            game_lines: Vec::new(),
             launcher_log,
             log_tab_game: true,
             java_probe: None,
@@ -271,8 +328,6 @@ impl LauncherApp {
             updater,
             discord: PresenceService::start(discord::system_connector()),
             launcher_started: presence::now_unix(),
-            game_started: None,
-            game_activity: None,
             mark,
             backdrop_time: 0.0,
             glow: None,
@@ -281,6 +336,11 @@ impl LauncherApp {
         if let Some(msg) = updated {
             app.notify(Status::Ok(msg));
         }
+        if app.instance(&app.cfg.default_instance).is_none() {
+            app.cfg.default_instance = instances::DEFAULT_ID.into();
+        }
+        let start = app.cfg.default_instance.clone();
+        app.set_editing(&start);
         app
     }
 
@@ -309,8 +369,9 @@ impl LauncherApp {
         if p == self.page {
             return;
         }
-        if self.page == Page::Settings || self.page == Page::Account {
+        if self.page == Page::Settings || self.page == Page::Account || self.page == Page::Mods {
             self.save_config();
+            self.save_game();
         }
         match p {
             Page::Cosmetics => {
@@ -326,6 +387,7 @@ impl LauncherApp {
 
     fn start(&mut self, busy: Busy, f: impl FnOnce(SharedProgress, Sender<Msg>) + Send + 'static) {
         self.save_config();
+        self.save_game();
         self.busy = busy;
         self.progress = Progress::new();
         let p = self.progress.clone();
@@ -350,7 +412,193 @@ impl LauncherApp {
         }
     }
 
+    // ---- instances and accounts ---------------------------------------------------------
+
+    fn instance(&self, id: &str) -> Option<&Instance> {
+        self.instances.iter().find(|i| i.id == id)
+    }
+
+    fn editing_instance(&self) -> &Instance {
+        self.instance(&self.editing)
+            .unwrap_or_else(|| &self.instances[0])
+    }
+
+    fn instance_name(&self, id: &str) -> String {
+        self.instance(id)
+            .map(|i| i.meta.name.clone())
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Re-scan instances from disk, keeping the current selections when they still exist.
+    fn reload_instances(&mut self) {
+        self.save_game();
+        self.instances = instances::load_all(&self.layout, &self.cfg);
+        if self.instance(&self.cfg.default_instance).is_none() {
+            self.cfg.default_instance = instances::DEFAULT_ID.into();
+            self.cfg_dirty = true;
+        }
+        let editing = if self.instance(&self.editing).is_some() {
+            self.editing.clone()
+        } else {
+            instances::DEFAULT_ID.to_string()
+        };
+        self.editing.clear(); // force the pages to reload
+        self.set_editing(&editing);
+    }
+
+    /// Point the Cosmetics, Mods and per-instance Settings pages at an instance.
+    fn set_editing(&mut self, id: &str) {
+        if id == self.editing {
+            return;
+        }
+        self.save_game();
+        let Some(inst) = self.instance(id).cloned() else {
+            return;
+        };
+        let layout = inst.layout(&self.layout);
+        self.editing = inst.id.clone();
+        self.game = inst.meta.game.clone();
+        self.game_dirty = false;
+        // Fresh page state: results still in flight for the previous instance are dropped
+        // with the old channels, so they can never land in this one.
+        self.cosmetics = CosmeticsPage::new(layout.clone());
+        self.skin = SkinPage::new(layout.clone());
+        self.qol = QolPage::new(layout);
+        match self.page {
+            Page::Cosmetics => {
+                self.cosmetics.refresh();
+                self.skin.refresh();
+            }
+            Page::Mods => self.qol.refresh(),
+            _ => {}
+        }
+    }
+
+    /// Write the edited instance's launch settings if they changed.
+    fn save_game(&mut self) {
+        if !self.game_dirty {
+            return;
+        }
+        self.game.validate();
+        let Some(inst) = self.instances.iter_mut().find(|i| i.id == self.editing) else {
+            self.game_dirty = false;
+            return;
+        };
+        inst.meta.game = self.game.clone();
+        match inst.save() {
+            Ok(()) => self.game_dirty = false,
+            Err(e) => {
+                self.game_dirty = false;
+                self.notify(Status::Error(format!(
+                    "could not save instance settings: {e}"
+                )));
+            }
+        }
+    }
+
+    /// Save one instance's settings after `f` changes them.
+    fn update_instance(&mut self, id: &str, f: impl FnOnce(&mut Instance)) {
+        if id == self.editing {
+            self.save_game();
+        }
+        let Some(inst) = self.instances.iter_mut().find(|i| i.id == id) else {
+            return;
+        };
+        f(inst);
+        if let Err(e) = inst.save() {
+            self.notify(Status::Error(format!(
+                "could not save instance settings: {e}"
+            )));
+        }
+        if id == self.editing {
+            self.game = self.editing_instance().meta.game.clone();
+        }
+    }
+
+    fn reload_accounts(&mut self) {
+        let store = auth::load_store(&self.layout.accounts());
+        self.accounts = store.summaries();
+        self.active_account = store.active.clone();
+    }
+
+    fn account(&self, uuid: &str) -> Option<&AccountSummary> {
+        self.accounts.iter().find(|a| a.uuid == uuid)
+    }
+
+    fn active(&self) -> Option<&AccountSummary> {
+        self.active_account.as_deref().and_then(|u| self.account(u))
+    }
+
+    /// Who an instance would play as right now.
+    fn launch_account(&self, inst: &Instance) -> Result<LaunchAccount, String> {
+        match &inst.meta.account {
+            AccountChoice::Offline => Ok(LaunchAccount::Offline(self.cfg.offline_name.clone())),
+            AccountChoice::Account { uuid } => match self.account(uuid) {
+                Some(a) if a.needs_sign_in => Err(format!(
+                    "{} needs to sign in again (Accounts page) before {} can start.",
+                    a.name, inst.meta.name
+                )),
+                Some(_) => Ok(LaunchAccount::Microsoft(uuid.clone())),
+                None => Err(format!(
+                    "{} is assigned an account that is no longer saved. Pick another in its settings.",
+                    inst.meta.name
+                )),
+            },
+            AccountChoice::Active if self.offline_mode => {
+                Ok(LaunchAccount::Offline(self.cfg.offline_name.clone()))
+            }
+            AccountChoice::Active => match self.active() {
+                Some(a) if a.needs_sign_in => Err(format!(
+                    "{} needs to sign in again (Accounts page) before playing.",
+                    a.name
+                )),
+                Some(a) => Ok(LaunchAccount::Microsoft(a.uuid.clone())),
+                None => {
+                    Err("Sign in with Microsoft, or enable offline mode, before playing.".into())
+                }
+            },
+        }
+    }
+
+    /// Label for an instance's account setting.
+    fn account_label(&self, choice: &AccountChoice) -> String {
+        match choice {
+            AccountChoice::Offline => format!("Offline ({})", self.cfg.offline_name),
+            AccountChoice::Account { uuid } => self
+                .account(uuid)
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|| "Removed account".into()),
+            AccountChoice::Active => match self.active() {
+                Some(a) if !self.offline_mode => format!("Active account ({})", a.name),
+                _ if self.offline_mode => {
+                    format!("Active account (offline: {})", self.cfg.offline_name)
+                }
+                _ => "Active account (none signed in)".into(),
+            },
+        }
+    }
+
+    /// UUID of the Microsoft account an instance plays as (None offline).
+    fn instance_uuid(&self, inst: &Instance) -> Option<String> {
+        match self.launch_account(inst) {
+            Ok(LaunchAccount::Microsoft(u)) => Some(u),
+            _ => match &inst.meta.account {
+                AccountChoice::Account { uuid } => Some(uuid.clone()),
+                _ => None,
+            },
+        }
+    }
+
+    fn any_run(&self) -> bool {
+        !self.runs.is_empty()
+    }
+
     fn play(&mut self, ctx: &egui::Context) {
+        let id = self.cfg.default_instance.clone();
+        self.play_instance(&id, ctx);
+    }
+
+    fn play_instance(&mut self, id: &str, ctx: &egui::Context) {
         // A signed release marked this version as no longer supported.
         if let Some(v) = self.updater.required_version(&self.cfg) {
             self.notify(Status::Error(format!(
@@ -359,29 +607,92 @@ impl LauncherApp {
             self.updater.open_prompt(ctx);
             return;
         }
-        if !self.offline_mode && self.account.is_none() {
-            self.go(Page::Account);
-            self.notify(Status::Error(
-                "Sign in with Microsoft, or enable offline mode, before playing.".into(),
-            ));
+        if self.busy == Busy::Installing {
+            self.notify(Status::Info("Wait for the repair to finish.".into()));
             return;
         }
-        self.forge_seen = false;
-        self.mod_seen = false;
-        self.game_lines.clear();
-        self.game_started = Some(presence::now_unix());
-        self.game_activity = None;
-        let req = PlayRequest {
-            layout: self.layout.clone(),
-            cfg: self.cfg.clone(),
-            account: if self.offline_mode {
-                None
-            } else {
-                self.account.clone()
-            },
+        if self.runs.contains_key(id) {
+            self.notify(Status::Info(format!(
+                "{} is already running.",
+                self.instance_name(id)
+            )));
+            return;
+        }
+        if id == self.editing {
+            self.save_game();
+        }
+        let Some(inst) = self.instance(id).cloned() else {
+            self.notify(Status::Error("That instance no longer exists.".into()));
+            return;
         };
-        let ctx = ctx.clone();
-        self.start(Busy::Launching, move |p, tx| worker::play(req, p, tx, ctx));
+        if !inst.supported() {
+            self.notify(Status::Error(format!(
+                "{} uses Minecraft {} ({}), which this Night Launcher can't start.",
+                inst.meta.name, inst.meta.mc_version, inst.meta.loader
+            )));
+            return;
+        }
+        let account = match self.launch_account(&inst) {
+            Ok(a) => a,
+            Err(e) => {
+                self.go(Page::Account);
+                self.notify(Status::Error(e));
+                return;
+            }
+        };
+        self.save_config();
+        let progress = Progress::new();
+        self.runs.insert(
+            id.to_string(),
+            Run {
+                progress: progress.clone(),
+                handle: None,
+                player: String::new(),
+                forge_seen: false,
+                mod_seen: false,
+                started: presence::now_unix(),
+                activity: None,
+                stopping: false,
+            },
+        );
+        self.game_logs.insert(id.to_string(), Vec::new());
+        self.log_instance = id.to_string();
+        self.update_instance(id, |i| i.meta.last_launch = Some(auth::now_secs()));
+        let req = PlayRequest {
+            id: id.to_string(),
+            layout: inst.layout(&self.layout),
+            cfg: self.cfg.clone(),
+            game: inst.meta.game.clone(),
+            account,
+        };
+        let (tx, ctx2) = (self.tx.clone(), ctx.clone());
+        if let Err(e) = std::thread::Builder::new()
+            .name(format!("play-{id}"))
+            .spawn(move || worker::play(req, progress, tx, ctx2))
+        {
+            self.runs.remove(id);
+            self.notify(Status::Error(format!("could not start the launch: {e}")));
+        }
+    }
+
+    /// Stop a game: cancel it while preparing, or end the process.
+    fn stop_instance(&mut self, id: &str) {
+        let Some(run) = self.runs.get_mut(id) else {
+            return;
+        };
+        run.stopping = true;
+        match &run.handle {
+            None => run.progress.cancel(),
+            Some(h) => {
+                let r = match h.lock() {
+                    Ok(mut c) => c.kill(),
+                    Err(p) => p.into_inner().kill(),
+                };
+                if let Err(e) = r {
+                    log::warn!("could not stop instance {id}: {e}");
+                }
+            }
+        }
     }
 
     fn repair(&mut self, ctx: &egui::Context) {
@@ -410,11 +721,14 @@ impl LauncherApp {
                 Msg::SignedIn(Ok(a)) => {
                     if self.busy == Busy::SigningIn {
                         self.busy = Busy::Idle;
-                        self.notify(Status::Ok(format!("Signed in as {}.", a.name)));
+                        self.notify(Status::Ok(format!(
+                            "Signed in as {}. It is now the active account.",
+                            a.name
+                        )));
                         self.offline_mode = false;
                     }
                     self.device_code = None;
-                    self.account = Some(a);
+                    self.reload_accounts();
                 }
                 Msg::SignedIn(Err(e)) => {
                     self.busy = Busy::Idle;
@@ -425,80 +739,138 @@ impl LauncherApp {
                         self.notify(Status::Error(format!("Sign-in failed: {e}")));
                     }
                 }
-                Msg::Launched { log_path } => {
-                    self.busy = Busy::Running;
+                Msg::AccountsChanged => self.reload_accounts(),
+                Msg::InstanceOp(r) => {
+                    self.instances_ui.working = false;
+                    self.reload_instances();
+                    match r {
+                        Ok(m) => self.notify(Status::Ok(m)),
+                        Err(e) => self.notify(Status::Error(e)),
+                    }
+                }
+                Msg::Launched {
+                    id,
+                    log_path,
+                    handle,
+                    account,
+                } => {
                     self.install = InstallState::load(&self.layout.install_state());
                     self.install_problems.clear();
-                    log::info!("game log: {}", log_path.display());
-                    self.notify(Status::Info("Minecraft is starting…".into()));
+                    log::info!("instance {id}: game log {}", log_path.display());
+                    let name = self.instance_name(&id);
+                    if let Some(r) = self.runs.get_mut(&id) {
+                        r.handle = Some(handle);
+                        r.player = account;
+                    }
+                    self.notify(Status::Info(format!("{name} is starting…")));
                 }
-                Msg::LaunchFailed(e) => {
-                    self.busy = Busy::Idle;
-                    self.game_started = None;
-                    self.game_activity = None;
+                Msg::LaunchFailed { id, error } => {
+                    let stopped = self.runs.remove(&id).is_some_and(|r| r.stopping);
                     self.install = InstallState::load(&self.layout.install_state());
-                    self.notify(Status::Error(e));
-                }
-                Msg::Game(GameEvent::Line(l)) => {
-                    if self.game_lines.len() >= MAX_GAME_LINES {
-                        self.game_lines.drain(..MAX_GAME_LINES / 10);
-                    }
-                    self.game_lines.push(l);
-                }
-                Msg::Game(GameEvent::ForgeLoaded) => self.forge_seen = true,
-                Msg::Game(GameEvent::Activity(a)) => self.game_activity = Some(a),
-                Msg::Game(GameEvent::ModReady) => {
-                    self.mod_seen = true;
-                    self.notify(Status::Ok(
-                        "Minecraft is running with the Night client.".into(),
-                    ));
-                    if self.cfg.close_on_launch {
-                        std::process::exit(0);
+                    let name = self.instance_name(&id);
+                    if stopped || error == kestrel_core::Error::Cancelled.to_string() {
+                        self.notify(Status::Info(format!("{name}: launch cancelled.")));
+                    } else {
+                        self.notify(Status::Error(format!("{name}: {error}")));
                     }
                 }
-                Msg::Game(GameEvent::Exited(code)) => {
-                    self.busy = Busy::Idle;
-                    self.game_started = None;
-                    self.game_activity = None;
-                    let s = match code {
-                        Some(0) => Status::Info("Minecraft closed.".into()),
-                        c => Status::Error(format!(
-                            "Minecraft exited with code {}. See Logs for details{}.",
-                            c.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into()),
-                            if self.mod_seen {
-                                ""
-                            } else {
-                                " (the client mod never finished loading)"
-                            }
-                        )),
-                    };
-                    self.notify(s);
+                Msg::Game { id, event } => self.game_event(id, event),
+                Msg::PlayerChanged { id, name } => {
+                    let inst = self.instance_name(&id);
+                    if let Some(r) = self.runs.get_mut(&id) {
+                        r.player = name.clone();
+                    }
+                    self.notify(Status::Ok(format!("{inst} switched to {name} in game.")));
                 }
                 Msg::JavaProbe(r) => self.java_probe = Some(r),
             }
         }
     }
 
+    fn game_event(&mut self, id: String, event: GameEvent) {
+        let name = self.instance_name(&id);
+        match event {
+            GameEvent::Line(l) => {
+                let lines = self.game_logs.entry(id).or_default();
+                if lines.len() >= MAX_GAME_LINES {
+                    lines.drain(..MAX_GAME_LINES / 10);
+                }
+                lines.push(l);
+            }
+            GameEvent::ForgeLoaded => {
+                if let Some(r) = self.runs.get_mut(&id) {
+                    r.forge_seen = true;
+                }
+            }
+            GameEvent::Request(..) => {} // answered by the worker's bridge
+            GameEvent::Activity(a) => {
+                if let Some(r) = self.runs.get_mut(&id) {
+                    r.activity = Some(a);
+                }
+            }
+            GameEvent::ModReady => {
+                if let Some(r) = self.runs.get_mut(&id) {
+                    r.mod_seen = true;
+                }
+                self.notify(Status::Ok(format!(
+                    "{name} is running with the Night client."
+                )));
+                // Only when nothing else is still starting (closing would orphan that launch).
+                if self.cfg.close_on_launch && self.runs.values().all(|r| r.mod_seen) {
+                    self.save_game();
+                    self.save_config();
+                    std::process::exit(0);
+                }
+            }
+            GameEvent::Exited(code) => {
+                let run = self.runs.remove(&id);
+                let stopped = run.as_ref().is_some_and(|r| r.stopping);
+                let mod_seen = run.as_ref().is_some_and(|r| r.mod_seen);
+                self.update_instance(&id, |i| i.meta.last_exit = code);
+                let s = match code {
+                    _ if stopped => Status::Info(format!("{name} was stopped.")),
+                    Some(0) => Status::Info(format!("{name} closed.")),
+                    c => Status::Error(format!(
+                        "{name} exited with code {}. See Logs for details{}.",
+                        c.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into()),
+                        if mod_seen {
+                            ""
+                        } else {
+                            " (the client mod never finished loading)"
+                        }
+                    )),
+                };
+                self.notify(s);
+            }
+        }
+    }
+
     /// Push the current state to Discord (dropped when unchanged; never blocks).
     fn sync_discord(&mut self) {
-        let phase = match self.busy {
-            Busy::Launching => Phase::Starting,
-            Busy::Running => Phase::Running(self.game_activity),
-            Busy::Idle | Busy::Installing | Busy::SigningIn => Phase::Launcher,
+        // With several games running, the one in multiplayer (else the longest-running) wins.
+        let shown = self.runs.values().filter(|r| r.running()).max_by_key(|r| {
+            (
+                r.activity == Some(GameActivity::Multiplayer),
+                std::cmp::Reverse(r.started),
+            )
+        });
+        let (phase, started) = match shown {
+            Some(r) => (Phase::Running(r.activity), Some(r.started)),
+            None if self.any_run() => (Phase::Starting, None),
+            None => (Phase::Launcher, None),
         };
         self.discord.set(presence::desired(
             &self.cfg,
             phase,
             self.launcher_started,
-            self.game_started,
+            started,
         ));
     }
 
     /// The Microsoft account whose real skin and restricted capes apply
     /// (none in offline mode).
     fn online_uuid(&self) -> Option<String> {
-        self.account
-            .as_ref()
+        self.active()
             .filter(|_| !self.offline_mode)
             .map(|a| a.uuid.clone())
     }
@@ -507,7 +879,7 @@ impl LauncherApp {
         if self.offline_mode {
             Some(self.cfg.offline_name.clone())
         } else {
-            self.account.as_ref().map(|a| a.name.clone())
+            self.active().map(|a| a.name.clone())
         }
     }
 
@@ -560,8 +932,8 @@ impl LauncherApp {
             ui.add_space(4.0);
         }
 
-        // Logs and the game state at the bottom.
-        let bottom_h = if compact { 64.0 } else { 98.0 };
+        // Logs, the account switcher and the game state at the bottom.
+        let bottom_h = if compact { 112.0 } else { 160.0 };
         let space = ui.available_height() - bottom_h;
         if space > 0.0 {
             ui.add_space(space);
@@ -573,14 +945,26 @@ impl LauncherApp {
         if clicked {
             target = Some(Page::Logs);
         }
+        ui.add_space(8.0);
+        self.sidebar_account(ui, compact, item_w);
         ui.add_space(10.0);
-        let (text, tone) = match self.busy {
-            Busy::Running if self.mod_seen => ("Playing", Tone::Good),
-            Busy::Running | Busy::Launching => ("Starting", Tone::Accent),
-            Busy::Installing => ("Installing", Tone::Accent),
-            Busy::SigningIn => ("Signing in", Tone::Accent),
-            Busy::Idle => ("Ready", Tone::Neutral),
+        let playing = self.runs.values().filter(|r| r.mod_seen).count();
+        let text = match (self.busy, self.runs.len(), playing) {
+            (Busy::Installing, ..) => "Installing".to_string(),
+            (Busy::SigningIn, ..) => "Signing in".to_string(),
+            (_, 0, _) => "Ready".to_string(),
+            (_, 1, 1) => "Playing".to_string(),
+            (_, n, p) if p == n => format!("{n} playing"),
+            (_, 1, _) => "Starting".to_string(),
+            (_, n, p) => format!("{p}/{n} playing"),
         };
+        let tone = match (self.busy, self.runs.len(), playing) {
+            (Busy::Installing | Busy::SigningIn, ..) => Tone::Accent,
+            (_, 0, _) => Tone::Neutral,
+            (_, n, p) if n == p => Tone::Good,
+            _ => Tone::Accent,
+        };
+        let text = text.as_str();
         ui.horizontal(|ui| {
             ui.add_space(if compact { 26.0 } else { 20.0 });
             if compact {
@@ -776,43 +1160,82 @@ impl LauncherApp {
         );
         let (line, _) = self.install_line();
         ui.label(theme::muted(line));
-        ui.add_space(22.0);
+        ui.add_space(18.0);
 
-        let busy = self.busy != Busy::Idle;
-        let blocked = busy || required;
-        let (label, detail) = match self.busy {
-            Busy::Idle if required => ("UPDATE REQUIRED", "Install the update to play".to_string()),
-            Busy::Idle if self.install.is_none() => {
+        // Which instance Play starts (the default one).
+        let target = self.cfg.default_instance.clone();
+        let w = ui.available_width().clamp(260.0, 360.0);
+        ui.horizontal(|ui| {
+            ui.label(theme::muted("Instance"));
+            let current = self.instance_name(&target);
+            let mut pick = None;
+            egui::ComboBox::from_id_salt("home-instance")
+                .selected_text(current)
+                .width(w - 70.0)
+                .show_ui(ui, |ui| {
+                    for i in &self.instances {
+                        let label = if self.runs.contains_key(&i.id) {
+                            format!("{}  ·  running", i.meta.name)
+                        } else {
+                            i.meta.name.clone()
+                        };
+                        if ui.selectable_label(i.id == target, label).clicked() {
+                            pick = Some(i.id.clone());
+                        }
+                    }
+                });
+            if let Some(id) = pick {
+                self.cfg.default_instance = id;
+                self.cfg_dirty = true;
+            }
+        });
+        let target = self.cfg.default_instance.clone();
+        ui.add_space(10.0);
+
+        let run = self.runs.get(&target);
+        let installing = self.busy == Busy::Installing;
+        let blocked = installing || self.busy == Busy::SigningIn || required || run.is_some();
+        let account = self
+            .instance(&target)
+            .map(|i| self.account_label(&i.meta.account))
+            .unwrap_or_default();
+        let (label, detail) = match run {
+            _ if installing => ("REPAIRING", self.progress.snapshot().0),
+            None if required => ("UPDATE REQUIRED", "Install the update to play".to_string()),
+            None if self.busy == Busy::SigningIn => (
+                "SIGNING IN",
+                "Finish signing in on the Accounts page".to_string(),
+            ),
+            None if self.install.is_none() => {
                 ("PLAY", "Downloads and installs on first start".to_string())
             }
-            Busy::Idle => (
+            None => (
                 "PLAY",
-                format!("Night Launcher {LAUNCHER_VERSION}  ·  Minecraft {MC_VERSION}"),
+                format!("{}  ·  {account}", self.instance_name(&target)),
             ),
-            Busy::Installing => ("REPAIRING", self.progress.snapshot().0),
-            Busy::SigningIn => (
-                "SIGNING IN",
-                "Finish signing in on the Account page".to_string(),
+            Some(r) if !r.running() => ("STARTING", r.progress.snapshot().0),
+            Some(r) if r.mod_seen => (
+                "RUNNING",
+                format!("{} as {}", self.instance_name(&target), r.player),
             ),
-            Busy::Launching => ("STARTING", self.progress.snapshot().0),
-            Busy::Running if self.mod_seen => {
-                ("RUNNING", "Minecraft is running with Night".to_string())
-            }
-            Busy::Running => (
+            Some(_) => (
                 "LOADING",
                 "Minecraft is loading the Night client".to_string(),
             ),
         };
-        let progress = match self.busy {
-            Busy::Installing | Busy::Launching => {
+        let progress = match run {
+            _ if installing => {
                 let (_, done, total) = self.progress.snapshot();
                 Some((total > 0).then(|| done as f32 / total as f32))
             }
-            Busy::SigningIn => Some(None),
-            Busy::Running if !self.mod_seen => Some(None),
+            Some(r) if !r.running() => {
+                let (_, done, total) = r.progress.snapshot();
+                Some((total > 0).then(|| done as f32 / total as f32))
+            }
+            Some(r) if !r.mod_seen => Some(None),
+            None if self.busy == Busy::SigningIn => Some(None),
             _ => None,
         };
-        let w = ui.available_width().clamp(260.0, 360.0);
         if theme::play_button(ui, Vec2::new(w, 68.0), label, &detail, !blocked, progress).clicked()
         {
             self.play(ctx);
@@ -823,7 +1246,7 @@ impl LauncherApp {
                 ui,
                 Kind::Ghost,
                 Some(Icon::Account),
-                "Open the Account page",
+                "Open the Accounts page",
                 true,
             )
             .clicked()
@@ -833,9 +1256,23 @@ impl LauncherApp {
         }
         ui.add_space(12.0);
 
-        match self.busy {
-            Busy::Installing | Busy::Launching => {
-                let (stage, done, total) = self.progress.snapshot();
+        if installing {
+            let (stage, done, total) = self.progress.snapshot();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(stage).color(theme::TEXT));
+                if total > 0 {
+                    ui.label(theme::muted(format!("{done} / {total}")));
+                }
+            });
+            theme::progress_bar(ui, (total > 0).then(|| done as f32 / total as f32), w);
+            ui.add_space(6.0);
+            if theme::button(ui, Kind::Secondary, Some(Icon::Close), "Cancel", true).clicked() {
+                self.progress.cancel();
+            }
+        } else if let Some(r) = self.runs.get(&target) {
+            let (forge, modr, running) = (r.forge_seen, r.mod_seen, r.running());
+            if !running {
+                let (stage, done, total) = r.progress.snapshot();
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(stage).color(theme::TEXT));
                     if total > 0 {
@@ -844,55 +1281,62 @@ impl LauncherApp {
                 });
                 theme::progress_bar(ui, (total > 0).then(|| done as f32 / total as f32), w);
                 ui.add_space(6.0);
-                if theme::button(ui, Kind::Secondary, Some(Icon::Close), "Cancel", true).clicked() {
-                    self.progress.cancel();
-                }
-            }
-            Busy::Running => {
+            } else {
                 ui.horizontal(|ui| {
                     theme::pill(
                         ui,
                         "Forge loaded",
-                        if self.forge_seen {
-                            Tone::Good
-                        } else {
-                            Tone::Neutral
-                        },
+                        if forge { Tone::Good } else { Tone::Neutral },
                     );
                     theme::pill(
                         ui,
                         "Night client loaded",
-                        if self.mod_seen {
-                            Tone::Good
-                        } else {
-                            Tone::Neutral
-                        },
+                        if modr { Tone::Good } else { Tone::Neutral },
                     );
                 });
+                ui.add_space(6.0);
             }
-            _ => {
-                ui.horizontal(|ui| {
-                    if theme::button(
-                        ui,
-                        Kind::Secondary,
-                        Some(Icon::Repair),
-                        "Repair / verify",
-                        !busy,
-                    )
-                    .on_hover_text(
-                        "Check every game file and re-download anything missing or damaged",
-                    )
-                    .clicked()
-                    {
-                        self.repair(ctx);
-                    }
-                    if theme::button(ui, Kind::Ghost, Some(Icon::Folder), "Game folder", true)
-                        .clicked()
-                    {
-                        open_path(&self.layout.instance());
-                    }
-                });
+            let stop_label = if running { "Stop" } else { "Cancel" };
+            if theme::button(ui, Kind::Secondary, Some(Icon::Stop), stop_label, true)
+                .on_hover_text("Closes this instance's game only")
+                .clicked()
+            {
+                self.stop_instance(&target);
             }
+        } else {
+            ui.horizontal(|ui| {
+                if theme::button(
+                    ui,
+                    Kind::Secondary,
+                    Some(Icon::Repair),
+                    "Repair / verify",
+                    self.busy == Busy::Idle && !self.any_run(),
+                )
+                .on_hover_text(if self.any_run() {
+                    "Close running games first: repair rewrites the shared game files"
+                } else {
+                    "Check every game file and re-download anything missing or damaged"
+                })
+                .clicked()
+                {
+                    self.repair(ctx);
+                }
+                if theme::button(ui, Kind::Ghost, Some(Icon::Folder), "Game folder", true).clicked()
+                    && let Some(i) = self.instance(&target)
+                {
+                    open_path(&i.game_dir);
+                }
+            });
+        }
+        let others: Vec<String> = self
+            .runs
+            .keys()
+            .filter(|k| **k != target)
+            .map(|k| self.instance_name(k))
+            .collect();
+        if !others.is_empty() {
+            ui.add_space(8.0);
+            ui.label(theme::muted(format!("Also running: {}", others.join(", "))));
         }
     }
 
@@ -972,7 +1416,7 @@ impl LauncherApp {
                             .color(theme::TEXT),
                     );
                     ui.add_space(2.0);
-                    let (acct, tone) = match (&self.account, self.offline_mode) {
+                    let (acct, tone) = match (self.active(), self.offline_mode) {
                         (_, true) => ("Offline mode", Tone::Warn),
                         (Some(_), false) => ("Microsoft account", Tone::Good),
                         (None, false) => ("Not signed in", Tone::Warn),
@@ -1039,7 +1483,7 @@ impl LauncherApp {
             ),
             Summary::Unknown => ("Not checked".to_string(), "Click to check now".to_string()),
         };
-        let (acct_value, acct_detail) = match (&self.account, self.offline_mode) {
+        let (acct_value, acct_detail) = match (self.active(), self.offline_mode) {
             (_, true) => (
                 "Offline".to_string(),
                 format!("Playing as {}", self.cfg.offline_name),
@@ -1095,187 +1539,6 @@ impl LauncherApp {
         }
     }
 
-    // ---- Account -----------------------------------------------------------------------
-
-    fn account_page(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-        card(ui, |ui| {
-            match self.account.clone() {
-                Some(a) => {
-                    ui.horizontal(|ui| {
-                        self.skin.set_account(Some(&a.uuid));
-                        let (r, _) = ui.allocate_exact_size(Vec2::splat(56.0), Sense::hover());
-                        ui.painter().rect_filled(r, CornerRadius::same(10), CARD);
-                        match self.skin.active_preview(&ctx) {
-                            // Face: columns 4..12, rows 0..8 of the 36x32 preview.
-                            Ok(tex) if !self.offline_mode => {
-                                ui.painter().image(
-                                    tex.id(),
-                                    r.shrink(6.0),
-                                    Rect::from_min_max(
-                                        pos2(4.0 / 36.0, 0.0),
-                                        pos2(12.0 / 36.0, 8.0 / 32.0),
-                                    ),
-                                    Color32::WHITE,
-                                );
-                            }
-                            _ => icons::paint(ui.painter(), r.shrink(14.0), Icon::Account, MUTED),
-                        }
-                        ui.add_space(6.0);
-                        ui.vertical(|ui| {
-                            ui.label(
-                                RichText::new(&a.name)
-                                    .font(theme::semibold(20.0))
-                                    .color(theme::TEXT),
-                            );
-                            ui.horizontal(|ui| {
-                                theme::pill(ui, "Microsoft account", Tone::Good);
-                                if self.offline_mode {
-                                    theme::pill(ui, "Offline mode is on", Tone::Warn);
-                                }
-                            });
-                            ui.label(
-                                RichText::new(format!("UUID {}", a.uuid))
-                                    .small()
-                                    .color(theme::FAINT),
-                            );
-                        });
-                    });
-                    if !kestrel_core::secure::is_supported() {
-                        ui.add_space(6.0);
-                        theme::banner(
-                            ui,
-                            Tone::Warn,
-                            "",
-                            "Secure storage is unavailable on this OS; you will need to sign in again next time.",
-                        );
-                    }
-                    ui.add_space(10.0);
-                    if theme::button(
-                        ui,
-                        Kind::Danger,
-                        Some(Icon::Close),
-                        "Sign out",
-                        self.busy == Busy::Idle,
-                    )
-                    .clicked()
-                    {
-                        auth::forget_account(&self.layout.accounts());
-                        self.account = None;
-                        self.notify(Status::Info("Signed out.".into()));
-                    }
-                }
-                None => {
-                    theme::card_title(
-                        ui,
-                        "Sign in with Microsoft",
-                        "Needed for online servers such as Hypixel. You sign in on microsoft.com in your browser; \
-                         Night Launcher never sees your password.",
-                    );
-                    ui.add_space(4.0);
-                    let client_id = auth::validate_client_id(self.cfg.msa_client_id());
-                    let can = self.busy == Busy::Idle && client_id.is_ok();
-                    if theme::button_sized(
-                        ui,
-                        Kind::Primary,
-                        Some(Icon::Account),
-                        "Sign in with Microsoft",
-                        can,
-                        220.0,
-                    )
-                    .clicked()
-                    {
-                        let (id, path, ctx) = (
-                            client_id.as_ref().cloned().unwrap_or_default(),
-                            self.layout.accounts(),
-                            ui.ctx().clone(),
-                        );
-                        self.start(Busy::SigningIn, move |p, tx| {
-                            worker::sign_in(id, path, p, tx, ctx)
-                        });
-                    }
-                    if let Err(e) = &client_id {
-                        ui.add_space(6.0);
-                        theme::banner(ui, Tone::Warn, "", &format!("{e}"));
-                    }
-                }
-            }
-            if let Some(code) = self.device_code.clone() {
-                ui.add_space(14.0);
-                egui::Frame::NONE
-                    .fill(CARD)
-                    .stroke(Stroke::new(1.0, ACCENT.gamma_multiply(0.6)))
-                    .corner_radius(CornerRadius::same(theme::RADIUS))
-                    .inner_margin(egui::Margin::same(16))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.label(theme::muted("Open the Microsoft page and enter this code:"));
-                        ui.add_space(4.0);
-                        ui.label(theme::spaced(
-                            &code.user_code,
-                            theme::bold(30.0),
-                            ACCENT_TEXT,
-                            4.0,
-                        ));
-                        ui.add_space(8.0);
-                        ui.horizontal_wrapped(|ui| {
-                            if theme::button(
-                                ui,
-                                Kind::Primary,
-                                None,
-                                "Open microsoft.com/link",
-                                true,
-                            )
-                            .on_hover_text(&code.verification_uri)
-                            .clicked()
-                            {
-                                ui.ctx()
-                                    .open_url(egui::OpenUrl::new_tab(&code.verification_uri));
-                            }
-                            if theme::button(ui, Kind::Secondary, None, "Copy code", true).clicked()
-                            {
-                                ui.ctx().copy_text(code.user_code.clone());
-                                self.notify(Status::Info("Code copied.".into()));
-                            }
-                            if theme::button(ui, Kind::Ghost, Some(Icon::Close), "Cancel", true)
-                                .clicked()
-                            {
-                                self.progress.cancel();
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            theme::spinner(ui, 14.0, MUTED);
-                            ui.label(
-                                RichText::new("Waiting for you to finish signing in…")
-                                    .small()
-                                    .color(MUTED),
-                            );
-                        });
-                    });
-            }
-        });
-        ui.add_space(theme::GAP);
-        card(ui, |ui| {
-            theme::card_title(
-                ui,
-                "Offline mode",
-                "For singleplayer and offline-mode servers only. Online servers (Hypixel, etc.) reject offline sessions.",
-            );
-            ui.checkbox(&mut self.offline_mode, "Play offline");
-            ui.horizontal(|ui| {
-                ui.label("Offline name");
-                if ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.cfg.offline_name).desired_width(220.0),
-                    )
-                    .changed()
-                {
-                    self.cfg_dirty = true;
-                }
-            });
-        });
-    }
-
     // ---- Settings ----------------------------------------------------------------------
 
     fn settings(&mut self, ui: &mut egui::Ui) {
@@ -1288,9 +1551,24 @@ impl LauncherApp {
             self.settings_tab = SETTINGS_TABS[i].0;
         }
         ui.add_space(theme::GAP);
+        if matches!(self.settings_tab, SettingsTab::Game | SettingsTab::Java) {
+            self.instance_picker(
+                ui,
+                "These settings belong to one instance. Updates and Advanced apply to the whole launcher.",
+            );
+            ui.add_space(theme::GAP);
+        }
         let dirty = match self.settings_tab {
-            SettingsTab::Game => self.settings_game(ui),
-            SettingsTab::Java => self.settings_java(ui),
+            SettingsTab::Game => {
+                let d = self.settings_game(ui);
+                self.game_dirty |= d;
+                d
+            }
+            SettingsTab::Java => {
+                let d = self.settings_java(ui);
+                self.game_dirty |= d;
+                d
+            }
             SettingsTab::Updates => {
                 self.updater
                     .settings_ui(ui, &mut self.cfg, self.busy != Busy::Idle)
@@ -1311,14 +1589,14 @@ impl LauncherApp {
                 "Size and mode of the Minecraft window when it starts.",
             );
             dirty |= ui
-                .checkbox(&mut self.cfg.fullscreen, "Start in fullscreen")
+                .checkbox(&mut self.game.fullscreen, "Start in fullscreen")
                 .changed();
-            ui.add_enabled_ui(!self.cfg.fullscreen, |ui| {
+            ui.add_enabled_ui(!self.game.fullscreen, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Window size");
                     dirty |= ui
                         .add(
-                            egui::DragValue::new(&mut self.cfg.window_width)
+                            egui::DragValue::new(&mut self.game.window_width)
                                 .range(640..=7680)
                                 .suffix(" px"),
                         )
@@ -1326,7 +1604,7 @@ impl LauncherApp {
                     ui.label("×");
                     dirty |= ui
                         .add(
-                            egui::DragValue::new(&mut self.cfg.window_height)
+                            egui::DragValue::new(&mut self.game.window_height)
                                 .range(480..=4320)
                                 .suffix(" px"),
                         )
@@ -1334,10 +1612,10 @@ impl LauncherApp {
                 });
                 ui.horizontal_wrapped(|ui| {
                     for (w, h) in [(854, 480), (1280, 720), (1600, 900), (1920, 1080)] {
-                        let on = self.cfg.window_width == w && self.cfg.window_height == h;
+                        let on = self.game.window_width == w && self.game.window_height == h;
                         if ui.selectable_label(on, format!("{w}×{h}")).clicked() {
-                            self.cfg.window_width = w;
-                            self.cfg.window_height = h;
+                            self.game.window_width = w;
+                            self.game.window_height = h;
                             dirty = true;
                         }
                     }
@@ -1347,12 +1625,20 @@ impl LauncherApp {
         ui.add_space(theme::GAP);
         card(ui, |ui| {
             theme::card_title(ui, "Launcher", "");
+            theme::card_title(ui, "", "Applies to every instance.");
             dirty |= ui
                 .checkbox(
                     &mut self.cfg.close_on_launch,
                     "Close the launcher once the game has loaded",
                 )
                 .changed();
+            ui.label(
+                RichText::new(
+                    "The in-game account switcher needs the launcher, so it is unavailable while this is on.",
+                )
+                .small()
+                .color(MUTED),
+            );
         });
         dirty
     }
@@ -1372,7 +1658,7 @@ impl LauncherApp {
                 .clamp(1024, 16384);
             dirty |= ui
                 .add(
-                    egui::Slider::new(&mut self.cfg.max_ram_mib, 512..=upper)
+                    egui::Slider::new(&mut self.game.max_ram_mib, 512..=upper)
                         .suffix(" MB")
                         .step_by(256.0),
                 )
@@ -1380,10 +1666,10 @@ impl LauncherApp {
             ui.horizontal_wrapped(|ui| {
                 for p in sysmem::presets(self.total_ram) {
                     if ui
-                        .selectable_label(self.cfg.max_ram_mib == p.max_mib, p.name)
+                        .selectable_label(self.game.max_ram_mib == p.max_mib, p.name)
                         .clicked()
                     {
-                        self.cfg.max_ram_mib = p.max_mib;
+                        self.game.max_ram_mib = p.max_mib;
                         dirty = true;
                     }
                 }
@@ -1404,24 +1690,24 @@ impl LauncherApp {
             theme::card_title(ui, "Java", "Minecraft 1.8.9 with Forge needs Java 8.");
             dirty |= ui
                 .radio_value(
-                    &mut self.cfg.use_managed_java,
+                    &mut self.game.use_managed_java,
                     true,
                     "Managed Java 8 from Mojang (recommended)",
                 )
                 .changed();
             dirty |= ui
                 .radio_value(
-                    &mut self.cfg.use_managed_java,
+                    &mut self.game.use_managed_java,
                     false,
                     "Custom Java executable",
                 )
                 .changed();
-            let custom = !self.cfg.use_managed_java;
+            let custom = !self.game.use_managed_java;
             ui.add_enabled_ui(custom, |ui| {
                 ui.horizontal(|ui| {
                     dirty |= ui
                         .add(
-                            egui::TextEdit::singleline(&mut self.cfg.custom_java_path)
+                            egui::TextEdit::singleline(&mut self.game.custom_java_path)
                                 .desired_width(ui.available_width().min(420.0) - 90.0)
                                 .hint_text("C:\\Program Files\\Java\\jre1.8.0_xxx\\bin\\java.exe"),
                         )
@@ -1429,7 +1715,7 @@ impl LauncherApp {
                     if theme::button(ui, Kind::Secondary, None, "Test", custom).clicked() {
                         self.java_probe = None;
                         let (p, tx, ctx) = (
-                            PathBuf::from(&self.cfg.custom_java_path),
+                            PathBuf::from(&self.game.custom_java_path),
                             self.tx.clone(),
                             ui.ctx().clone(),
                         );
@@ -1459,14 +1745,14 @@ impl LauncherApp {
             theme::card_title(ui, "Launch arguments", "");
             dirty |= ui
                 .checkbox(
-                    &mut self.cfg.use_default_jvm_args,
+                    &mut self.game.use_default_jvm_args,
                     "Use tuned G1 garbage collector flags",
                 )
                 .changed();
             ui.label("Extra JVM arguments");
             dirty |= ui
                 .add(
-                    egui::TextEdit::singleline(&mut self.cfg.extra_jvm_args)
+                    egui::TextEdit::singleline(&mut self.game.extra_jvm_args)
                         .desired_width(ui.available_width().min(520.0))
                         .hint_text("e.g. -XX:+UseStringDeduplication"),
                 )
@@ -1623,12 +1909,46 @@ impl LauncherApp {
                 self.log_tab_game = i == 0;
             }
             ui.add_space(8.0);
+            if self.log_tab_game {
+                let mut pick = None;
+                egui::ComboBox::from_id_salt("log-instance")
+                    .selected_text(self.instance_name(&self.log_instance))
+                    .show_ui(ui, |ui| {
+                        for i in &self.instances {
+                            let label = if self.runs.contains_key(&i.id) {
+                                format!("{}  ·  running", i.meta.name)
+                            } else {
+                                i.meta.name.clone()
+                            };
+                            if ui
+                                .selectable_label(i.id == self.log_instance, label)
+                                .clicked()
+                            {
+                                pick = Some(i.id.clone());
+                            }
+                        }
+                    });
+                if let Some(id) = pick {
+                    self.log_instance = id;
+                }
+            }
             if theme::button(ui, Kind::Ghost, Some(Icon::Folder), "Open folder", true).clicked() {
-                open_path(&self.layout.logs());
+                let dir = if self.log_tab_game {
+                    self.instance(&self.log_instance)
+                        .map(|i| i.layout(&self.layout).game_logs())
+                        .unwrap_or_else(|| self.layout.logs())
+                } else {
+                    self.layout.logs()
+                };
+                let _ = std::fs::create_dir_all(&dir);
+                open_path(&dir);
             }
             if theme::button(ui, Kind::Ghost, None, "Copy all", true).clicked() {
                 let text = if self.log_tab_game {
-                    self.game_lines.join("\n")
+                    self.game_logs
+                        .get(&self.log_instance)
+                        .map(|l| l.join("\n"))
+                        .unwrap_or_default()
                 } else {
                     self.launcher_log.snapshot().join("\n")
                 };
@@ -1637,7 +1957,7 @@ impl LauncherApp {
             }
             if theme::button(ui, Kind::Ghost, Some(Icon::Close), "Clear", true).clicked() {
                 if self.log_tab_game {
-                    self.game_lines.clear();
+                    self.game_logs.remove(&self.log_instance);
                 } else {
                     self.launcher_log.clear();
                 }
@@ -1646,7 +1966,10 @@ impl LauncherApp {
         ui.add_space(10.0);
         let launcher_lines;
         let lines: &[String] = if self.log_tab_game {
-            &self.game_lines
+            self.game_logs
+                .get(&self.log_instance)
+                .map(Vec::as_slice)
+                .unwrap_or(&[])
         } else {
             launcher_lines = self.launcher_log.snapshot();
             &launcher_lines
@@ -1745,7 +2068,8 @@ impl LauncherApp {
                                 runtime::platform_key()
                             ),
                         ),
-                        ("Game preset", self.cfg.game_preset.label().to_string()),
+                        ("Game preset", self.game.game_preset.label().to_string()),
+                        ("Instances", self.instances.len().to_string()),
                         ("Data directory", self.layout.root().display().to_string()),
                     ] {
                         ui.label(theme::muted(k));
@@ -1799,7 +2123,7 @@ impl eframe::App for LauncherApp {
         self.handle_messages();
         self.sync_discord();
         let ctx = ui.ctx().clone();
-        if self.busy != Busy::Idle {
+        if self.busy != Busy::Idle || self.runs.values().any(|r| !r.mod_seen) {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         let now = ctx.input(|i| i.time);
@@ -1898,27 +2222,39 @@ impl eframe::App for LauncherApp {
                                 self.home_h = ui.cursor().top() - top;
                             }
                             Page::Account => self.account_page(ui),
+                            Page::Instances => self.instances_page(ui),
                             Page::Settings => self.settings(ui),
                             Page::Cosmetics => {
+                                self.instance_picker(
+                                    ui,
+                                    "Cosmetics are saved per instance. Your skin is shared by every instance that uses the same account.",
+                                );
+                                ui.add_space(theme::GAP);
                                 // Restricted catalog capes are offered only to the
-                                // signed-in Microsoft account that owns them; the real
-                                // account skin is previewed only for it, too.
-                                let uuid = self.online_uuid();
+                                // Microsoft account that owns them; the real account
+                                // skin is previewed only for it, too.
+                                let inst = self.editing_instance().clone();
+                                let uuid = self.instance_uuid(&inst);
                                 self.cosmetics.set_account(uuid.as_deref());
                                 self.skin.set_account(uuid.as_deref());
-                                self.cosmetics
-                                    .ui(ui, self.busy == Busy::Running, &mut self.skin)
+                                let running = self.runs.get(&self.editing).is_some_and(Run::running);
+                                self.cosmetics.ui(ui, running, &mut self.skin)
                             }
                             Page::Mods => {
-                                let active =
-                                    self.busy != Busy::Idle && self.busy != Busy::SigningIn;
-                                let cfg = &mut self.cfg;
+                                self.instance_picker(
+                                    ui,
+                                    "Mods, resource packs and the performance preset are separate for each instance.",
+                                );
+                                ui.add_space(theme::GAP);
+                                let active = self.runs.contains_key(&self.editing)
+                                    || self.busy == Busy::Installing;
+                                let game = &mut self.game;
                                 let mut dirty = false;
                                 self.qol.ui(ui, active, &mut |ui| {
-                                    dirty |= presets_ui(ui, cfg);
+                                    dirty |= presets_ui(ui, game);
                                 });
                                 if dirty {
-                                    self.cfg_dirty = true;
+                                    self.game_dirty = true;
                                 }
                             }
                             Page::About => self.about(ui),
@@ -1948,10 +2284,14 @@ impl eframe::App for LauncherApp {
 
         // Debounced autosave: settings are written when you leave the page,
         // start a job, or one second after the first unsaved change.
+        if self.game_dirty {
+            self.cfg_dirty = true;
+        }
         if self.cfg_dirty {
             let since = *self.cfg_dirty_since.get_or_insert(now);
             if now - since >= 1.0 {
                 self.save_config();
+                self.save_game();
             }
         }
         if self.cfg_dirty {
@@ -1963,6 +2303,7 @@ impl eframe::App for LauncherApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.save_config();
+        self.save_game();
         self.progress.cancel();
     }
 }
@@ -1971,7 +2312,7 @@ impl eframe::App for LauncherApp {
 const ACCENT_TEXT: Color32 = theme::ACCENT_HI;
 
 /// The Performance presets tab (inside QoL). Returns true when changed.
-fn presets_ui(ui: &mut egui::Ui, cfg: &mut LauncherConfig) -> bool {
+fn presets_ui(ui: &mut egui::Ui, cfg: &mut GameSettings) -> bool {
     let mut dirty = false;
     ui.label(theme::muted(
         "Choosing a preset asks the client to apply it on next start. Individual settings remain adjustable in game \

@@ -388,6 +388,13 @@ public final class CapeManager {
         return l.frames[l.timeline.frameAt(System.currentTimeMillis(), c.animationFps)];
     }
 
+    /** Forget per-account state after the in-game account switcher changed the session. */
+    public void onSessionChanged() {
+        localUuidResolved = false;
+        localUuid = null;
+        sync.onSessionChanged();
+    }
+
     private String localUuid() {
         if (!localUuidResolved) {
             localUuidResolved = true;

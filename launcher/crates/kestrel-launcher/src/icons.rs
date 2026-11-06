@@ -24,6 +24,16 @@ pub enum Icon {
     Close,
     Cube,
     Clock,
+    /// Stacked layers (instances).
+    Layers,
+    /// Two opposing arrows (switch account).
+    Switch,
+    Plus,
+    Copy,
+    Trash,
+    Edit,
+    Stop,
+    Star,
 }
 
 /// Maps the 24x24 design grid into `rect`.
@@ -198,6 +208,65 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Clock => {
             painter.circle_stroke(g.p(12.0, 12.0), g.r(9.0), s);
             line(&[(12.0, 7.0), (12.0, 12.0), (15.5, 14.0)]);
+        }
+        Icon::Layers => {
+            closed(&[(12.0, 3.5), (21.0, 8.0), (12.0, 12.5), (3.0, 8.0)]);
+            line(&[(3.0, 12.0), (12.0, 16.5), (21.0, 12.0)]);
+            line(&[(3.0, 16.0), (12.0, 20.5), (21.0, 16.0)]);
+        }
+        Icon::Switch => {
+            line(&[(4.0, 8.0), (19.0, 8.0)]);
+            line(&[(15.5, 4.5), (19.0, 8.0), (15.5, 11.5)]);
+            line(&[(20.0, 16.0), (5.0, 16.0)]);
+            line(&[(8.5, 12.5), (5.0, 16.0), (8.5, 19.5)]);
+        }
+        Icon::Plus => {
+            line(&[(12.0, 5.0), (12.0, 19.0)]);
+            line(&[(5.0, 12.0), (19.0, 12.0)]);
+        }
+        Icon::Copy => {
+            closed(&[(8.5, 8.5), (20.0, 8.5), (20.0, 20.0), (8.5, 20.0)]);
+            line(&[
+                (15.5, 8.5),
+                (15.5, 4.0),
+                (4.0, 4.0),
+                (4.0, 15.5),
+                (8.5, 15.5),
+            ]);
+        }
+        Icon::Trash => {
+            line(&[(4.0, 6.5), (20.0, 6.5)]);
+            line(&[(9.5, 6.5), (9.5, 3.8), (14.5, 3.8), (14.5, 6.5)]);
+            closed(&[(6.0, 6.5), (18.0, 6.5), (17.0, 20.5), (7.0, 20.5)]);
+            line(&[(10.0, 10.5), (10.0, 16.5)]);
+            line(&[(14.0, 10.5), (14.0, 16.5)]);
+        }
+        Icon::Edit => {
+            closed(&[
+                (15.5, 4.0),
+                (20.0, 8.5),
+                (9.0, 19.5),
+                (4.0, 20.0),
+                (4.5, 15.0),
+            ]);
+            line(&[(13.0, 6.5), (17.5, 11.0)]);
+        }
+        Icon::Stop => {
+            painter.rect_filled(
+                Rect::from_min_max(g.p(6.5, 6.5), g.p(17.5, 17.5)),
+                g.r(2.0),
+                color,
+            );
+        }
+        Icon::Star => {
+            let pts: Vec<(f32, f32)> = (0..10)
+                .map(|i| {
+                    let a = -PI / 2.0 + i as f32 * PI / 5.0;
+                    let r = if i % 2 == 0 { 9.0 } else { 4.0 };
+                    (12.0 + r * a.cos(), 12.6 + r * a.sin())
+                })
+                .collect();
+            closed(&pts);
         }
     }
 }

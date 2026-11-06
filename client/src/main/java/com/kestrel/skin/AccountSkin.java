@@ -25,6 +25,13 @@ public final class AccountSkin {
     private AccountSkin() {
     }
 
+    /** Look the skin up again on next use (the session changed). Game thread. */
+    public static void reset() {
+        requested = false;
+        texture = null;
+        slim = false;
+    }
+
     /** Start the lookup once; until it finishes the default skin is used. */
     public static void request(KestrelClient client) {
         if (requested) return;

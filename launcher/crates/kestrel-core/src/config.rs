@@ -60,6 +60,9 @@ impl GamePreset {
 #[serde(default)]
 pub struct LauncherConfig {
     pub config_version: u32,
+    // The game settings below (memory through game_preset) are the Default
+    // instance's settings from before 1.1. They seed it until it saves its own
+    // `night-instance.json`, and stay so an older launcher still finds them.
     /// Max heap (-Xmx) in MiB.
     pub max_ram_mib: u64,
     /// Use the managed Mojang Java 8 runtime (recommended).
@@ -100,6 +103,8 @@ pub struct LauncherConfig {
     /// Launcher renderer: `auto` (OpenGL on Windows), `opengl` or `direct3d`.
     /// Takes effect on the next start.
     pub renderer: String,
+    /// Id of the instance Play starts (see `instances.rs`).
+    pub default_instance: String,
 }
 
 impl Default for LauncherConfig {
@@ -125,6 +130,7 @@ impl Default for LauncherConfig {
             discord_rpc_enabled: true,
             discord_client_id: String::new(),
             renderer: "auto".into(),
+            default_instance: crate::instances::DEFAULT_ID.into(),
         }
     }
 }
@@ -205,25 +211,28 @@ impl LauncherConfig {
     /// Extra JVM args split on whitespace. Arguments that would override
     /// what the launcher controls (classpath, natives) are dropped.
     pub fn extra_jvm_args(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut it = self.extra_jvm_args.split_whitespace();
-        while let Some(a) = it.next() {
-            if a == "-cp" || a == "-classpath" {
-                log::warn!("ignoring extra JVM argument controlled by the launcher: {a}");
-                it.next(); // drop its value too
-                continue;
-            }
-            if a.starts_with("-Djava.library.path")
-                || a.starts_with("-Xmx")
-                || a.starts_with("-Xms")
-            {
-                log::warn!("ignoring extra JVM argument controlled by the launcher: {a}");
-                continue;
-            }
-            out.push(a.to_string());
-        }
-        out
+        filter_jvm_args(&self.extra_jvm_args)
     }
+}
+
+/// Split extra JVM args on whitespace, dropping the ones that would override
+/// what the launcher controls (classpath, natives, heap size).
+pub fn filter_jvm_args(raw: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut it = raw.split_whitespace();
+    while let Some(a) = it.next() {
+        if a == "-cp" || a == "-classpath" {
+            log::warn!("ignoring extra JVM argument controlled by the launcher: {a}");
+            it.next(); // drop its value too
+            continue;
+        }
+        if a.starts_with("-Djava.library.path") || a.starts_with("-Xmx") || a.starts_with("-Xms") {
+            log::warn!("ignoring extra JVM argument controlled by the launcher: {a}");
+            continue;
+        }
+        out.push(a.to_string());
+    }
+    out
 }
 
 /// Minecraft usernames: 3-16 chars of [A-Za-z0-9_].

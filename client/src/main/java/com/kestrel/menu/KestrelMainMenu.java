@@ -86,6 +86,9 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private float markX, markY, markSize;
     private float charX, feetY, charScale;
     private int skinX, skinY, skinW, skinH;
+    /** ACCOUNTS button, beside SKIN (same size and row). */
+    private int accX;
+    private float accHover;
 
     public KestrelMainMenu(KestrelClient client, SkinManager skins) {
         this.client = client;
@@ -113,9 +116,11 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         float minHead = 30f;
         if (feetY - charScale * 2.25f < minHead) charScale = (feetY - minHead) / 2.25f;
         charX = Math.max(navX + navW + charScale * 0.9f, w * 0.64f);
-        skinW = 88;
+        skinW = 80;
         skinH = 20;
-        skinX = Math.round(charX - skinW / 2f);
+        // SKIN and ACCOUNTS side by side, centred under the character.
+        skinX = Math.round(charX - (skinW * 2 + 6) / 2f);
+        accX = skinX + skinW + 6;
         skinY = Math.round(feetY + Math.max(8f, charScale * 0.12f));
         if (skinY + skinH > h - 18) skinY = h - 18 - skinH;
         footerLeft = "Night " + client.version();
@@ -194,6 +199,10 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         return mx >= skinX && mx < skinX + skinW && my >= skinY && my < skinY + skinH;
     }
 
+    private boolean overAccounts(int mx, int my) {
+        return mx >= accX && mx < accX + skinW && my >= skinY && my < skinY + skinH;
+    }
+
     private boolean ready() {
         return enteredNanos >= 0 && leaving < 0 && secs(enteredNanos, now()) > 0.35f;
     }
@@ -213,6 +222,9 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         } else if (overSkin(mx, my)) {
             click();
             mc.displayGuiScreen(new SkinScreen(client, skins, this));
+        } else if (overAccounts(mx, my)) {
+            click();
+            mc.displayGuiScreen(new com.kestrel.account.AccountScreen(client, this));
         }
     }
 
@@ -467,26 +479,30 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
                 argb(0x000000, 0.35f * tagIn));
         fontRendererObj.drawString(name, Math.round(x - nw / 2f), Math.round(tagY), argb(0xFFFFFF, Math.max(0.05f, tagIn)), false);
 
-        // SKIN button, tied to the character: appears once it has arrived.
+        // SKIN and ACCOUNTS buttons, tied to the character: they appear once it has arrived.
         float btnIn = easeOut((t - EntranceAnimation.ARRIVE + 0.1f) / 0.45f);
         if (btnIn > 0.02f) {
-            boolean over = ready() && overSkin(mx, my);
-            skinHover = approach(skinHover, over ? 1f : 0f, 14f, dt);
-            float lift = (1f - btnIn) * 6f;
-            int bx = skinX;
-            int by = Math.round(skinY + lift);
-            MenuBackground.gradientRect(bx, by, bx + skinW, by + skinH, lerpRgb(0x25183B, 0x8652D9, skinHover),
-                    0.85f * btnIn, 0.85f * btnIn);
-            // Thin outline.
-            int edge = argb(lerpRgb(0x4A3866, 0xC6A4FF, skinHover), btnIn);
-            Gui.drawRect(bx, by, bx + skinW, by + 1, edge);
-            Gui.drawRect(bx, by + skinH - 1, bx + skinW, by + skinH, edge);
-            Gui.drawRect(bx, by, bx + 1, by + skinH, edge);
-            Gui.drawRect(bx + skinW - 1, by, bx + skinW, by + skinH, edge);
-            String label = "SKIN";
-            int lw = spacedWidth(label, 3);
-            drawSpaced(label, bx + (skinW - lw) / 2, by + (skinH - 8) / 2, argb(0xFFFFFF, btnIn), 3);
+            skinHover = approach(skinHover, ready() && overSkin(mx, my) ? 1f : 0f, 14f, dt);
+            accHover = approach(accHover, ready() && overAccounts(mx, my) ? 1f : 0f, 14f, dt);
+            drawCharButton("SKIN", skinX, skinHover, btnIn);
+            drawCharButton("ACCOUNTS", accX, accHover, btnIn);
         }
+    }
+
+    private void drawCharButton(String label, int bx, float hover, float btnIn) {
+        float lift = (1f - btnIn) * 6f;
+        int by = Math.round(skinY + lift);
+        MenuBackground.gradientRect(bx, by, bx + skinW, by + skinH, lerpRgb(0x25183B, 0x8652D9, hover),
+                0.85f * btnIn, 0.85f * btnIn);
+        // Thin outline.
+        int edge = argb(lerpRgb(0x4A3866, 0xC6A4FF, hover), btnIn);
+        Gui.drawRect(bx, by, bx + skinW, by + 1, edge);
+        Gui.drawRect(bx, by + skinH - 1, bx + skinW, by + skinH, edge);
+        Gui.drawRect(bx, by, bx + 1, by + skinH, edge);
+        Gui.drawRect(bx + skinW - 1, by, bx + skinW, by + skinH, edge);
+        int spacing = spacedWidth(label, 3) + 6 <= skinW ? 3 : 1;
+        int lw = spacedWidth(label, spacing);
+        drawSpaced(label, bx + (skinW - lw) / 2, by + (skinH - 8) / 2, argb(0xFFFFFF, btnIn), spacing);
     }
 
     private void drawFooter(float e) {

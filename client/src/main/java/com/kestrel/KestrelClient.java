@@ -55,6 +55,8 @@ public final class KestrelClient {
     private KillDetector killDetector;
     private PerformanceManager performance;
     private LauncherSync launcherSync;
+    private final com.kestrel.account.AccountBridge accounts =
+            new com.kestrel.account.AccountBridge(System.getProperty("kestrel.activityToken"));
     private CombatTracker combat;
 
     KestrelClient(File dataDir, String version) {
@@ -110,6 +112,7 @@ public final class KestrelClient {
         input.registerKeybinds();
         camera.registerKeybinds();
         ActivityReporter activity = new ActivityReporter(System.getProperty("kestrel.activityToken"));
+        accounts.start();
         Object[] listeners = {this, performance, input, camera, toggleSprint, hud, crosshair, capes, sky, killEffects, killDetector, launcherSync, activity, skins, worldVisuals, new MenuReplacer(this, skins), combat, new BridgeAssist(this)};
         for (Object l : listeners) {
             MinecraftForge.EVENT_BUS.register(l);
@@ -127,6 +130,7 @@ public final class KestrelClient {
         if (event.phase == TickEvent.Phase.END) {
             configManager.tick();
             loader.drainOnGameThread();
+            accounts.tick();
         }
     }
 
@@ -172,6 +176,22 @@ public final class KestrelClient {
 
     public ConfigManager configManager() {
         return configManager;
+    }
+
+    /** The channel to Night Launcher used by the in-game account switcher. */
+    public com.kestrel.account.AccountBridge accounts() {
+        return accounts;
+    }
+
+    /**
+     * The in-game account switcher replaced the session: drop everything
+     * cached for the previous account (skin, restricted capes, cape sharing).
+     */
+    public void onSessionChanged() {
+        com.kestrel.skin.AccountSkin.reset();
+        skins.onSessionChanged();
+        capes.onSessionChanged();
+        com.kestrel.skin.AccountSkin.request(this);
     }
 
     public AsyncLoader loader() {

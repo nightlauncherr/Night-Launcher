@@ -7,14 +7,47 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{IoContext, Result};
 
-#[derive(Debug, Clone)]
+/// Paths of one installation. Shared, read-only game files (versions,
+/// libraries, assets, Java) live under the root; everything a game writes
+/// lives in the selected instance's game directory.
+///
+/// [`Layout::new`] selects the original (Default) instance: `<root>/instance`,
+/// with its disabled/trashed mods and launcher game logs at the root, exactly
+/// where earlier versions kept them. [`Layout::with_instance`] selects any
+/// other instance (see `instances.rs`).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
     root: PathBuf,
+    /// The game directory (`--gameDir`).
+    game_dir: PathBuf,
+    /// Where the launcher keeps per-instance files Forge must not see
+    /// (disabled mods, mod trash, captured game logs).
+    aux_dir: PathBuf,
 }
 
 impl Layout {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Layout { root: root.into() }
+        let root = root.into();
+        Layout {
+            game_dir: root.join("instance"),
+            aux_dir: root.clone(),
+            root,
+        }
+    }
+
+    /// The same installation with another instance selected. `game_dir` must
+    /// be a directory the instance registry validated.
+    pub fn with_instance(&self, game_dir: PathBuf, aux_dir: PathBuf) -> Layout {
+        Layout {
+            root: self.root.clone(),
+            game_dir,
+            aux_dir,
+        }
+    }
+
+    /// The Default instance of this installation.
+    pub fn default_instance(&self) -> Layout {
+        Layout::new(self.root.clone())
     }
 
     /// Platform default root directory.
@@ -57,7 +90,19 @@ impl Layout {
     }
     /// The game directory (`--gameDir`): mods, resource packs, options, saves.
     pub fn instance(&self) -> PathBuf {
-        self.root.join("instance")
+        self.game_dir.clone()
+    }
+    /// Per-instance launcher files (see the field docs).
+    pub fn aux_dir(&self) -> &Path {
+        &self.aux_dir
+    }
+    /// Root of every instance other than Default.
+    pub fn instances_dir(&self) -> PathBuf {
+        self.root.join("instances")
+    }
+    /// Deleted instances, kept until removed by hand.
+    pub fn instance_trash(&self) -> PathBuf {
+        self.root.join("instances-trash")
     }
     pub fn mods(&self) -> PathBuf {
         self.instance().join("mods")
@@ -72,8 +117,13 @@ impl Layout {
     pub fn natives(&self, version_id: &str) -> PathBuf {
         self.version_dir(version_id).join("natives")
     }
+    /// The launcher's own log.
     pub fn logs(&self) -> PathBuf {
         self.root.join("logs")
+    }
+    /// Captured output of this instance's game runs.
+    pub fn game_logs(&self) -> PathBuf {
+        self.aux_dir.join("logs")
     }
     pub fn launcher_config(&self) -> PathBuf {
         self.root.join("launcher.json")
@@ -94,11 +144,11 @@ impl Layout {
     /// Mods disabled in the QoL Mod Manager. Outside the game directory, so
     /// Forge never sees them.
     pub fn disabled_mods(&self) -> PathBuf {
-        self.root.join("mods-disabled")
+        self.aux_dir.join("mods-disabled")
     }
     /// Mods removed in the QoL Mod Manager (recoverable until deleted by hand).
     pub fn mod_trash(&self) -> PathBuf {
-        self.root.join("mods-trash")
+        self.aux_dir.join("mods-trash")
     }
 
     /// Create every directory the launcher writes into.
@@ -112,6 +162,7 @@ impl Layout {
             self.resourcepacks(),
             self.client_data(),
             self.logs(),
+            self.game_logs(),
             self.cache(),
         ] {
             std::fs::create_dir_all(&d).at(&d)?;
