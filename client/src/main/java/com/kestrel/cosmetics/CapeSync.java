@@ -148,6 +148,16 @@ public final class CapeSync {
                 published = cape;
                 nextPublishMs = 0;
                 KestrelMod.LOG.info("[Kestrel] cape sharing: published {}", cape);
+                // Read it back through the lookup path other players use (diagnostics).
+                try {
+                    UUID me = session.getProfile().getId();
+                    String seen = lookup(java.util.Collections.singletonList(me)).get(me);
+                    KestrelMod.LOG.info("[Kestrel] cape sharing: other Night players now see {}",
+                            seen == null ? "no cape" : seen);
+                } catch (Exception e) {
+                    KestrelMod.LOG.warn("[Kestrel] cape sharing: published, but reading it back failed: {}",
+                            e.toString());
+                }
             } catch (Exception e) {
                 nextPublishMs = System.currentTimeMillis() + PUBLISH_RETRY_MS;
                 KestrelMod.LOG.warn("[Kestrel] cape sharing: could not publish {} (retrying in a minute): {}", cape,
