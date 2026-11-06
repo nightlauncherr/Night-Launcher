@@ -826,7 +826,9 @@ impl LauncherApp {
                 let run = self.runs.remove(&id);
                 let stopped = run.as_ref().is_some_and(|r| r.stopping);
                 let mod_seen = run.as_ref().is_some_and(|r| r.mod_seen);
-                self.update_instance(&id, |i| i.meta.last_exit = code);
+                // A stop asked for in the launcher is not a crash.
+                let recorded = if stopped { None } else { code };
+                self.update_instance(&id, |i| i.meta.last_exit = recorded);
                 let s = match code {
                     _ if stopped => Status::Info(format!("{name} was stopped.")),
                     Some(0) => Status::Info(format!("{name} closed.")),
