@@ -1,4 +1,4 @@
 {
   "_comment": "Night cosmetics service (services/cosmetics) used to share capes between Night players. Empty url: capes stay local.",
-  "url": ""
+  "url": "https://night-cosmetics.nightlauncher.workers.dev"
 }

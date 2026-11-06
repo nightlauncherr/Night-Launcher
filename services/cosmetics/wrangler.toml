@@ -3,8 +3,7 @@ name = "night-cosmetics"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
 
-# Create the namespace once with:  npx wrangler kv namespace create CAPES
-# then paste the id it prints here.
+# KV namespace created with: npx wrangler kv namespace create CAPES
 [[kv_namespaces]]
 binding = "CAPES"
-id = "PASTE_KV_NAMESPACE_ID_HERE"
+id = "80274b5a37a242cabf6c19528dd379c5"

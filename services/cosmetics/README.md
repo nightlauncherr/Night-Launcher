@@ -38,7 +38,8 @@ npx wrangler deploy
 ```
 
 It prints the service URL, for example `https://night-cosmetics.<your-subdomain>.workers.dev`.
-Put that URL in `client/src/main/resources/assets/kestrel/cosmetics_service.json`:
+Put that URL in `client/src/main/resources/assets/kestrel/cosmetics_service.json` (the official
+service is `https://night-cosmetics.nightlauncher.workers.dev`):
 
 ```json
 { "url": "https://night-cosmetics.<your-subdomain>.workers.dev" }
