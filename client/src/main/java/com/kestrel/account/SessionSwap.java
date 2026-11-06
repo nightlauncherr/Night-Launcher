@@ -53,6 +53,17 @@ public final class SessionSwap {
         return new NewSession(name, uuid, token);
     }
 
+    private static java.util.List<Field> fields(Class<?> owner, Class<?> type) {
+        java.util.List<Field> out = new java.util.ArrayList<Field>();
+        for (Field f : owner.getDeclaredFields()) {
+            if (f.getType() == type && !Modifier.isStatic(f.getModifiers())) {
+                f.setAccessible(true);
+                out.add(f);
+            }
+        }
+        return out;
+    }
+
     private static Field onlyField(Class<?> owner, Class<?> type) {
         Field found = null;
         for (Field f : owner.getDeclaredFields()) {
@@ -73,7 +84,10 @@ public final class SessionSwap {
     public static Session apply(Minecraft mc, NewSession s) {
         if (mc.theWorld != null) throw new IllegalStateException("leave the world first");
         Field sessionField = onlyField(Minecraft.class, Session.class);
-        Field propsField = onlyField(Minecraft.class, PropertyMap.class);
+        // 1.8.9 has two: the profile properties (skin data, refilled from the session's
+        // profile when empty) and the Twitch user properties (launched as "{}"). Both
+        // describe the previous account only, so both are cleared.
+        java.util.List<Field> propFields = fields(Minecraft.class, PropertyMap.class);
         Session old;
         try {
             old = (Session) sessionField.get(mc);
@@ -85,8 +99,10 @@ public final class SessionSwap {
         try {
             sessionField.set(mc, next);
             if (mc.getSession() != next) throw new IllegalStateException("session did not change");
-            // Profile properties (skin data) belong to the old account; they are refilled on demand.
-            ((PropertyMap) propsField.get(mc)).clear();
+            for (Field f : propFields) {
+                PropertyMap m = (PropertyMap) f.get(mc);
+                if (m != null) m.clear();
+            }
         } catch (Exception e) {
             try {
                 sessionField.set(mc, old);
