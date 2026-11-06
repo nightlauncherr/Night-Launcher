@@ -53,8 +53,8 @@ The **Mojang** category lists 12 historical Mojang capes as *local Night cosmeti
 2011, 2012, 2013, 2015 and 2016, Realms MapMaker, Crafter, Translator, Mojang (Classic) and
 Mojang (2015) (the first and second Mojang staff designs), Cobalt and Mojira Moderator.
 
-- Only your Night client draws the one you equip. It does not grant or change any account
-  cape, nothing is sent to Mojang or to servers, and other players (vanilla or Night) don't
+- Your Night client draws the one you equip, and other Night players see it through cape
+  sharing (below). It does not grant or change any account cape, and vanilla players don't
   see it. Like every Night cape, it replaces your official cape on your own player while
   equipped (see "Official capes" below).
 - Night ships only their names and Mojang texture ids
@@ -106,18 +106,63 @@ allocated per frame; the current frame is picked by `FrameTimeline` from the wal
 used. Textures of capes nobody wears are freed (other players' capes 30 s after they were
 last drawn).
 
+## Rendering (independent of official capes and other cape mods)
+
+Equipping a Night cape is all it takes for it to draw: owning an official cape plays no
+part. `CapeRenderer` draws after the player (`RenderPlayerEvent.Post`), rebuilding
+`RendererLivingEntity`'s transform and vanilla `LayerCape`'s swing, and draws the box with
+`NightCapeModel`, Night's own copy of the vanilla cape model (same 10×16×1 box and UVs on
+a 64×32 sheet). It does **not** call `ModelPlayer.renderCape`, because cape mods replace
+that method: WaveyCapes (1.8.9) cancels it for every caller and draws only official capes
+itself, which made equipped Night capes invisible everywhere until 1.0.2. The menu
+character and the Skin screen use the same model. At start-up the log notes any cape mod it
+recognises (`waveycapes`, `capes`, `minecraftcapes`), and the first time a cape is drawn on
+your player it logs `drawing cape <id> on your player`.
+
 ## Official capes
 
 Almost every Java account owns an official Minecraft cape (and Mojang now gives several
-away), so a Night cape that yielded to it would never be seen. On **your own player** the
-Night cape you equip therefore replaces your official cape: while it is equipped and
-loaded, `getLocationCape()` reports no official cape for the local player
-(`MixinAbstractClientPlayer` → `CapeRenderer.hidesOfficialCape`) and Night's renderer
-draws the equipped one. While it is still loading, with **No cape**, or with "Show cape"
-off, your official cape shows as usual. Only your screen changes; other players still see
-your official cape. On other players, an official cape still wins over a catalog-assigned
-Night cape. Minecraft's own Options → Skin Customization → Cape switch hides every cape,
-Night's included; the in-game cape menu says so when it is off.
+away), so a Night cape that yielded to it would never be seen. The Night cape a player
+chose therefore replaces their official cape: while it is equipped and loaded,
+`getLocationCape()` reports no official cape for that player
+(`MixinAbstractClientPlayer` → `CapeRenderer.hidesOfficialCape`), so neither vanilla nor a
+cape mod draws a second cape. This applies to your own player and to other Night players
+whose shared cape is loaded. While it is still loading, with **No cape**, or with "Show
+cape" off, the official cape shows as usual. A catalog-assigned cape does not override an
+official one. Minecraft's own Options → Skin Customization → Cape switch hides every cape,
+Night's included: the in-game cape menu and the launcher's Capes tab say so when it is off.
+For your own player Night reads that switch from your settings directly, because the
+server's echo of it can be missing after you toggle it.
+
+## Sharing capes with other Night players
+
+The Night cosmetics service (`services/cosmetics`, a Cloudflare Worker, see its README)
+stores one thing per account: the id of the Night cape it has equipped.
+
+- **Publishing** (`CapeSync`): when your shareable cape changes (a built-in or Mojang
+  catalog cape; uploaded capes stay on your PC and publish as "none"), your client asks
+  Mojang's session server to record a join for
+  `sha1("night-cape-v1|<uuid>|<cape>|<unix time>|<random nonce>")`, which is the same thing
+  every online server does when you connect, and then sends the service your name, cape,
+  time and nonce. The service confirms the join with Mojang (`hasJoined`) before storing
+  anything, so only the account's owner can set its cape, and a captured request cannot be
+  replayed with another cape. Your login token goes to Mojang only, never to Night.
+  Offline sessions cannot publish. After publishing, the client reads its own entry back
+  and logs `other Night players now see <cape>`.
+- **Seeing others:** the UUIDs of real accounts (version 4) around you are looked up in
+  batches of up to 100, one request at a time, at most every 2 s, cached for 5 minutes;
+  textures are shared with every player wearing the same cape and freed when unused.
+  Players joining, leaving, rejoining or changing capes are picked up within those 5
+  minutes.
+- **Settings:** "Share my cape with Night players" (publishes "none" when off) and "Show
+  other Night players' capes" (in game; the launcher has the second one too).
+- **Connections:** HTTPS only. Java 8u51, which 1.8.9 runs on, predates the roots
+  Cloudflare's certificates chain to, so Night's own requests also trust a bundled set of
+  current public roots (`assets/kestrel/tls/roots.pem`, regenerated by
+  `tools/update_tls_roots.sh`). Full certificate and host-name checks still apply, and
+  nothing else in the game uses them.
+- **Off by default in a build** until `assets/kestrel/cosmetics_service.json` has the
+  service URL.
 
 ## Restricted capes (`owners`)
 
@@ -133,15 +178,14 @@ Night's included; the in-game cape menu says so when it is off.
 * **Other players:** Night clients draw a restricted cape on the player whose UUID owns it
   (the UUID the server reports, authenticated by Mojang on online-mode servers). Players can
   hide their cape with Skin Customization → Cape, and viewers can turn this off with
-  "Show players' assigned capes". On other players an official Minecraft cape always takes
-  precedence.
+  "Show other Night players' capes". On other players an official Minecraft cape takes
+  precedence over a catalog-assigned cape (a shared cape the player chose does not yield).
 
-Limitations, honestly: there is no Night server. The restriction is enforced by the
-signed client jar; anyone who modifies their own client could render any texture locally
-(only on their own screen). Other viewers see the assigned cape only if they run Night,
-and they see it whenever the owner is visible, because the owner's in-game cape choice is
-not transmitted. Nicked or offline-mode players are identified by whatever UUID the server
-gives them.
+Limitations: the restriction is enforced by the signed client jar; anyone who modifies
+their own client could render any texture locally (only on their own screen). The
+cosmetics service refuses ids it doesn't know the shape of, and clients draw a shared
+restricted cape only on its owner. Other viewers see Night capes only if they run Night.
+Nicked or offline-mode players are identified by whatever UUID the server gives them.
 
 ## Kasane Teto cape
 

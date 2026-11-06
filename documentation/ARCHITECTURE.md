@@ -157,7 +157,7 @@ angles (`EntityRenderer.orientCamera`, `Entity.setAngles`, `ActiveRenderInfo`,
 | Crosshair | `RenderGameOverlayEvent.Pre(CROSSHAIRS)` cancelled only when custom is on |
 | Toggle sprint | `ClientTickEvent` + `KeyBinding.setKeyBindState`; vanilla sprint rules still apply |
 | CPS | `MouseEvent` (in-game only; no global hooks) |
-| Capes | `RenderPlayerEvent.Post`: your selected cape on you, catalog-assigned capes on their owners (UUID); replicates `RendererLivingEntity` transforms and vanilla `LayerCape` motion. PNG strips and GIFs (own compositing, per-frame timing), see CAPES.md |
+| Capes | `RenderPlayerEvent.Post`: your selected cape on you, other Night players' shared capes and catalog-assigned capes on their owners (UUID); replicates `RendererLivingEntity` transforms and vanilla `LayerCape` motion and draws with Night's own `NightCapeModel` (cape mods cannot cancel it). Sharing through `services/cosmetics` (`CapeSync`). PNG strips and GIFs (own compositing, per-frame timing), see CAPES.md |
 | Activity (Discord) | `ClientTickEvent`: logs `[Night Launcher] activity <token>: menu/singleplayer/multiplayer` on change |
 | Skies | Forge `WorldProvider#setSkyRenderer` (Overworld only; uninstalled when disabled) |
 | Kill effects | Players only. `AttackEntityEvent` (who you hit) + `ClientTickEvent` (victim's hurt events, health ≤ 0, other attackers nearby → `KillAttribution`) + `ClientChatReceivedEvent` (kill feed that makes you the killer → `KillMessageMatcher`) → `KillEffectManager`; see KILL_EFFECTS.md |
