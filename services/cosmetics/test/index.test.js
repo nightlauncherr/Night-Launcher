@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handle, serverIdFor, normalizeUuid } from "../src/index.js";
+import { handle, serverIdFor, normalizeUuid } from "../src/lib.js";
 
 const UUID = "0123456789abcdef0123456789abcdef";
 const OTHER = "fedcba9876543210fedcba9876543210";
