@@ -20,7 +20,12 @@ no vanilla code is patched and every path is covered.
 - **Character**: your own skin (the applied Night skin, else your account skin, else
   Steve/Alex offline) as a 3D player model, classic or slim, with every second-layer part.
   It has your name tag and a soft floor shadow. The **SKIN** button under its feet opens
-  the Skin screen; a newly applied skin shows on the character straight away.
+  the Skin screen; a newly applied skin shows on the character straight away. The
+  **ACCOUNTS** button beside it opens the account switcher: the accounts saved in Night
+  Launcher with their faces, which one the game plays as, Add Microsoft account (the
+  sign-in code is shown in game), and Back. Clicking an account switches the game to it
+  through the launcher (see ARCHITECTURE.md); the name tag and skin update at once and the
+  next server you join uses that account. It needs the launcher to stay open.
 
 ## The entrance
 

@@ -31,14 +31,15 @@ Windows display scale. Everything follows Windows scaling (100%, 125%, 150%, …
 
 | Section | What it holds |
 |---|---|
-| **Home** | Play (installs on first start, then shows each stage with progress and Cancel; disabled while working or running, so the game can't be launched twice), Repair / verify, game folder, your player (the skin the game will use) and status tiles for installation, version, updates and account (neutral icons; the text carries the state). A required update shows a banner here. |
-| **Cosmetics** | Tabs: Kill effects, Skies, Capes, Skin (the local skin changer). The kill effect list scrolls on its own next to (or, on narrow windows, below) the preview, which shrinks on short windows so it always stays in view. |
-| **Mods** | Tabs: Mod Manager, Resource Packs, Performance presets. |
-| **Settings** | Tabs: Game (window size or fullscreen, close on launch), Java & memory (RAM, managed or custom Java with Test, G1 flags, extra JVM arguments), Updates (version, check, automatic prompt), Advanced (Microsoft app ID, launcher renderer, Discord Rich Presence, download threads, data folder). Changes save automatically. |
-| **Account** | Microsoft sign-in (device code shown with Open / Copy / Cancel), signed-in account with sign out, offline mode and offline name. |
+| **Home** | Instance picker and Play for the default instance (installs on first start, then shows each stage with progress and Cancel/Stop; an instance can't be started twice), Repair / verify (disabled while any game runs), game folder, your player (the active account's skin) and status tiles for installation, version, updates and account. Other running instances are listed under Play. A required update shows a banner here. |
+| **Instances** | One card per instance: name, Minecraft version, account, Running (PID) / Starting / Stopped (with the last exit code if it crashed), last played. Play/Stop, Settings (account, memory, window), Set as default, Rename, Duplicate (everything except logs), Folder, Cosmetics, Mods, Delete (moves to `instances-trash`; Default can't be deleted). New instance: name, version (1.8.9 + Forge + Night only), account, memory, Java, and what to copy from an existing instance (settings, mods, resource packs). Several instances can run at once. |
+| **Cosmetics** | "Editing instance" picker (cosmetics are saved per instance), then tabs: Kill effects, Skies, Capes, Skin (the local skin changer). The kill effect list scrolls on its own next to (or, on narrow windows, below) the preview, which shrinks on short windows so it always stays in view. |
+| **Mods** | "Editing instance" picker, then tabs: Mod Manager, Resource Packs, Performance presets. |
+| **Settings** | Tabs: Game (per instance: window size or fullscreen; launcher-wide: close on launch), Java & memory (per instance) (RAM, managed or custom Java with Test, G1 flags, extra JVM arguments), Updates (version, check, automatic prompt), Advanced (Microsoft app ID, launcher renderer, Discord Rich Presence, download threads, data folder). Changes save automatically. |
+| **Accounts** | Saved Microsoft accounts with face, name, UUID, Active and "Sign-in expired" badges and the instances assigned to each; Make active, Sign in again, Remove (confirmed; instances using it are named). Add another account (device code shown with Open / Copy / Cancel). Offline mode and offline name. The account switcher at the bottom of the sidebar switches the active account from any page. |
 | **About** | Versions, client mod, Java runtime, data directory, notes and licences. |
 | **Logs** | Live game output and the launcher log, with Open folder, Copy all and Clear. |
 
-Settings, accounts, game files, mods, resource packs, cosmetics and skins live in
-`%LOCALAPPDATA%\Kestrel` (the folder keeps the project's earlier name); the redesign didn't
-change any file format.
+Settings, accounts, game files and instances live in `%LOCALAPPDATA%\Kestrel` (the folder
+keeps the project's earlier name). The original game folder (`instance\`) is the Default
+instance; other instances are under `instances\`. See ARCHITECTURE.md for the layout.

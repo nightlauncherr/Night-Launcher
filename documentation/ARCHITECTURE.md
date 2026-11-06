@@ -69,8 +69,67 @@ Logs page.
 
 Device code → token (polling with `slow_down` handling, cancellable) → Xbox Live → XSTS
 (clear messages for known XErr codes) → Minecraft services → profile (404 = doesn't own
-Java Edition). Only the refresh token and profile are persisted, DPAPI-encrypted; the
+Java Edition). Only refresh tokens and profiles are persisted, DPAPI-encrypted; the
 Minecraft token is fetched fresh at each launch.
+
+`accounts.dat` holds an `AccountStore`: every saved account plus the active one's UUID
+(launchers before 1.1 stored one `StoredAccount`; `load_store` still reads that and the
+next save converts it). The UI only ever sees `AccountSummary` (name, UUID, "needs
+sign-in"). `refresh_session` refreshes one account under a process-wide refresh lock
+(refresh tokens rotate, so two launches of the same account must not race), checks that
+the token still belongs to the same Minecraft profile, and marks the account "needs
+sign-in" when Microsoft rejects it (expired or revoked) instead of failing silently.
+
+### Instances (`instances.rs`)
+
+Every instance has its own game folder (`--gameDir`): mods, resource packs, `options.txt`,
+`config/`, saves, screenshots, Minecraft's logs and the Night client data
+(`kestrel/`: config, cosmetics, skins). Versions, libraries, assets and Java are shared
+and only read by the game.
+
+```
+<root>/instance/                       Default instance (the pre-1.1 game folder, unchanged)
+<root>/mods-disabled, mods-trash, logs Default's launcher files (unchanged locations)
+<root>/instances/<id>/                 other instances; <id> is the folder name, fixed at creation
+<root>/instances/<id>/night-instance.json   name, version, account choice, launch settings
+<root>/instances/<id>/night-launcher/  disabled mods, mod trash, captured game logs
+<root>/instances-trash/<id>-<time>/    deleted instances (moved, never erased)
+```
+
+`Layout::with_instance` points every path helper (`mods()`, `client_data()`,
+`options_txt()`, `disabled_mods()`…) at one instance, so the Mods, Cosmetics and skin code
+works per instance without knowing about instances. Instances are found by scanning those
+folders; a damaged settings file affects only that instance. Renaming changes only the
+display name. Create assembles the folder under a temporary name and renames it into
+place. `RunLock` (a file opened without sharing on Windows) stops the same instance from
+starting twice, even from two launcher windows.
+
+Launch settings (memory, Java, window, preset) and the account choice (active account, a
+specific saved account, or offline) are per instance. Updates, Discord, the Microsoft app
+ID, download threads and saved accounts are launcher-wide. The legacy game settings in
+`launcher.json` seed the Default instance until it saves its own settings file.
+
+Each Play starts its own worker thread and process. Installs and repairs of the shared
+files are serialised (`INSTALL_LOCK`), and Repair is disabled while any game runs. Each
+instance gets its own copy of the Night client mod, refreshed at every launch.
+
+### In-game account switcher (`game_bridge.rs`, `account/` in the client)
+
+The game asks the launcher that started it: `[Kestrel] request <token> <n> <verb>` on stdout
+(the per-launch token is the activity token, so chat can't spoof it), and the launcher
+answers on the game's stdin with one JSON object per line. Verbs: `accounts`
+(names/UUIDs only), `switch <uuid>` (the launcher runs `refresh_session` and returns that
+account's Minecraft access token for this one game), `add` (device-code sign-in done by the
+launcher, the code shown in game), `cancel`. Refresh tokens never reach the game.
+
+The client swaps the session only on the title screen (no world loaded) and only with a
+validated reply: `SessionSwap` replaces the `Session` field of `Minecraft` (found by type),
+clears the cached profile properties, and puts the old session back if anything fails.
+Minecraft 1.8.9 reads the session through `getSession()` when it joins a server, so the
+next server joined uses the new account. Night's per-account caches (account skin, local
+skin identity, restricted capes, cape sharing) are reset. The launcher then makes that
+account active. If the launcher isn't running (closed after launch), stdin is closed and
+the screen says switching needs the launcher.
 
 ## Packaging
 
