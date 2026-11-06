@@ -355,8 +355,9 @@ impl CosmeticsPage {
         }
         ui.label(
             RichText::new(
-                "Local cosmetics: rendered by your Night client only. Other players see them only if they run a \
-                 compatible client that knows about them — Night does not send cosmetics to servers.",
+                "Cosmetics are drawn by your Night client. Your built-in or Mojang cape is also shown to other \
+                 Night players (\"Share my cape\" in Night Settings in game); everything else stays on your PC, \
+                 and nothing is sent to the servers you play on.",
             )
             .color(MUTED),
         );
@@ -849,8 +850,8 @@ impl CosmeticsPage {
         if self.cape_filter.category == MOJANG_CATEGORY.0 {
             ui.label(
                 RichText::new(
-                    "Historical Mojang capes, as local Night cosmetics: only your Night client shows them. \
-                     Equipping one does not give your account that cape, and other players don't see it. \
+                    "Historical Mojang capes, as Night cosmetics: Night players see the one you equip, other \
+                     players don't, and it does not give your account that cape. \
                      The original textures are downloaded from Mojang's texture server the first time and kept on your PC.",
                 )
                 .small()

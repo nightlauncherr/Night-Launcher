@@ -4,7 +4,7 @@
 
 | Source | Formats | Who sees it |
 |---|---|---|
-| Bundled catalog `client/src/main/resources/assets/kestrel/capes.json` | PNG (cape layout, optionally animated strips), GIF | Unrestricted capes: anyone can equip them; drawn on your own player by your client. Restricted capes: see below. |
+| Bundled catalog `client/src/main/resources/assets/kestrel/capes.json` | PNG (cape layout, optionally animated strips), GIF | Unrestricted capes: anyone can equip them; drawn by your client, and shown to other Night players through cape sharing (below). Restricted capes: see below. |
 | Custom folder `instance/kestrel/capes` (launcher **Upload cape…** or drop files in) | PNG ≤ 2 MB, GIF ≤ 4 MB | Your own player, your client only. |
 
 The catalog is compiled into the client jar **and** into the launcher (`include_str!`), so
