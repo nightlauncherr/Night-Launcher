@@ -109,7 +109,7 @@ public final class PlayerModelRenderer {
             float swing = Math.min(40.0F, Math.abs((float) Math.toDegrees(pose.lean)) * 3.0F);
             GlStateManager.rotate(6.0F + swing, 1.0F, 0.0F, 0.0F);
             GlStateManager.rotate(180.0F, 0.0F, 1.0F, 0.0F);
-            m.renderCape(s);
+            com.kestrel.cosmetics.NightCapeModel.render(s); // not m.renderCape: cape mods cancel that
             GlStateManager.popMatrix();
         }
 

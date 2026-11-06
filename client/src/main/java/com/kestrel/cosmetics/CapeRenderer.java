@@ -15,11 +15,12 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  * Renders Kestrel capes: your selected cape on your own player, and capes the
  * bundled catalog assigns to specific UUIDs on those players.
  *
- * <p>Uses only Forge's RenderPlayerEvent (no mixins): after the player is
- * drawn we rebuild the same model transform RendererLivingEntity uses and
- * then run vanilla LayerCape's motion maths, so the cape swings exactly like
- * a vanilla cape. Players who hide their cape in Skin Customization are
- * respected.
+ * <p>Uses Forge's RenderPlayerEvent: after the player is drawn we rebuild
+ * the same model transform RendererLivingEntity uses and run vanilla
+ * LayerCape's motion maths, so the cape swings exactly like a vanilla cape,
+ * then draw it with {@link NightCapeModel} (Night's own copy of the cape box)
+ * so other cape mods cannot cancel it. Players who hide their cape in Skin
+ * Customization are respected.
  *
  * <p>Official capes: on <b>your own</b> player the Kestrel cape you equipped
  * replaces your official Minecraft cape (see {@link #hidesOfficialCape}), since
@@ -29,9 +30,17 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 public final class CapeRenderer {
     private final KestrelClient client;
+    /** Cape id last logged as drawn on the local player (diagnostics, render thread). */
+    private String loggedLocal;
 
     public CapeRenderer(KestrelClient client) {
         this.client = client;
+        for (String mod : new String[] {"waveycapes", "capes", "minecraftcapes"}) {
+            if (net.minecraftforge.fml.common.Loader.isModLoaded(mod)) {
+                KestrelMod.LOG.info("[Kestrel] cape mod '{}' installed: Night capes use their own cape model, "
+                        + "so it cannot hide them", mod);
+            }
+        }
     }
 
     @SubscribeEvent
@@ -85,7 +94,16 @@ public final class CapeRenderer {
         GlStateManager.rotate(side / 2.0F, 0.0F, 0.0F, 1.0F);
         GlStateManager.rotate(-side / 2.0F, 0.0F, 1.0F, 0.0F);
         GlStateManager.rotate(180.0F, 0.0F, 1.0F, 0.0F);
-        event.renderer.getMainModel().renderCape(0.0625F);
+        // Night's own cape model, not ModelPlayer.renderCape: cape mods (WaveyCapes)
+        // cancel that method for every caller, which hid Night capes completely.
+        NightCapeModel.render(0.0625F);
+        if (player == mc.thePlayer) {
+            String id = client.config().cosmetics.cape;
+            if (!id.equals(loggedLocal)) {
+                loggedLocal = id;
+                KestrelMod.LOG.info("[Kestrel] drawing cape {} on your player", id);
+            }
+        }
 
         GlStateManager.disableRescaleNormal();
         GlStateManager.popMatrix();
