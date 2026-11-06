@@ -289,8 +289,8 @@ public final class ClientSettingsScreen extends GuiScreen {
                 }));
                 text(client.capes().sync().enabled()
                         ? "Sharing: other Night players see your built-in or Mojang cape (uploaded capes stay on your PC). "
-                                + "Your account is verified through Mojang's session server, the same check servers use; "
-                                + "your login token is never sent to Night."
+                                + "Your account is verified with the player certificate Mojang issues to it; "
+                                + "your login token and keys are never sent to Night."
                         : "Cape sharing is not set up in this build: capes are shown on your PC only.");
                 content.add(new ActionButton("Open custom capes folder", false, () -> openFolder(client.capes().customDir())));
                 text("Custom capes: PNG, 64x32 (or HD multiples like 128x64), max 2 MB; animated PNGs stack frames vertically. "

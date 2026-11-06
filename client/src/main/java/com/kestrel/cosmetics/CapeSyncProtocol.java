@@ -5,8 +5,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
@@ -16,9 +22,10 @@ import java.util.regex.Pattern;
 
 /**
  * Wire format of the Night cosmetics service (services/cosmetics): which cape
- * ids may be shared, the Mojang "join" server id that proves account
- * ownership, and parsing of lookup replies. Pure Java, unit-tested; must stay
- * in step with services/cosmetics/src/index.js.
+ * ids may be shared, the signed publish request that proves account ownership
+ * (with the account's Mojang player certificate), and parsing of lookup
+ * replies. Pure Java, unit-tested; must stay in step with
+ * services/cosmetics/src/lib.js.
  */
 public final class CapeSyncProtocol {
     public static final String PROTOCOL = "night-cape-v1";
@@ -58,15 +65,93 @@ public final class CapeSyncProtocol {
         return id != null && id.version() == 4;
     }
 
-    /** The serverId the client joins with and the service checks with hasJoined. */
-    public static String serverId(String uuid32, String cape, long ts, String nonce) {
+    /**
+     * The text the player's certificate key signs to publish a cape. Must match
+     * signedText in services/cosmetics/src/lib.js.
+     */
+    public static String signedText(String uuid32, String cape, long ts, String nonce) {
+        return PROTOCOL + "|" + uuid32 + "|" + cape + "|" + ts + "|" + nonce;
+    }
+
+    /**
+     * An account's Mojang player certificate (the key pair Minecraft 1.19+
+     * signs chat with), as returned by
+     * {@code POST https://api.minecraftservices.com/player/certificates}.
+     */
+    public static final class PlayerCertificate {
+        /** PKCS#8 DER. Stays on this PC. */
+        public final byte[] privateKey;
+        /** X.509 SubjectPublicKeyInfo DER. */
+        public final byte[] publicKey;
+        /** Mojang's signature binding publicKey to the account UUID and expiry ("publicKeySignatureV2"). */
+        public final byte[] mojangSignature;
+        public final long expiresAtMs;
+
+        PlayerCertificate(byte[] privateKey, byte[] publicKey, byte[] mojangSignature, long expiresAtMs) {
+            this.privateKey = privateKey;
+            this.publicKey = publicKey;
+            this.mojangSignature = mojangSignature;
+            this.expiresAtMs = expiresAtMs;
+        }
+
+        /** Whether it is still good for at least {@code marginMs}. */
+        public boolean usableAt(long nowMs, long marginMs) {
+            return expiresAtMs - marginMs > nowMs;
+        }
+    }
+
+    /** Parse Mojang's player-certificate reply; throws IllegalArgumentException when malformed. */
+    public static PlayerCertificate parseCertificate(String json) {
+        JsonElement root = new JsonParser().parse(json);
+        if (!root.isJsonObject()) throw new IllegalArgumentException("certificate reply is not an object");
+        JsonObject o = root.getAsJsonObject();
+        JsonElement kp = o.get("keyPair");
+        if (kp == null || !kp.isJsonObject()) throw new IllegalArgumentException("certificate reply has no keyPair");
+        byte[] priv = pem(string(kp.getAsJsonObject(), "privateKey"));
+        byte[] pub = pem(string(kp.getAsJsonObject(), "publicKey"));
+        byte[] sig = base64(string(o, "publicKeySignatureV2"));
+        long expires;
         try {
-            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-            byte[] d = sha1.digest((PROTOCOL + "|" + uuid32 + "|" + cape + "|" + ts + "|" + nonce)
-                    .getBytes(StandardCharsets.UTF_8));
-            return hex(d);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-1 unavailable", e);
+            expires = Instant.parse(string(o, "expiresAt")).toEpochMilli();
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("certificate reply has a bad expiresAt", e);
+        }
+        return new PlayerCertificate(priv, pub, sig, expires);
+    }
+
+    /** Sign {@link #signedText} with the certificate's private key (SHA256withRSA). */
+    public static byte[] sign(PlayerCertificate cert, String text) throws GeneralSecurityException {
+        PrivateKey key = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(cert.privateKey));
+        Signature s = Signature.getInstance("SHA256withRSA");
+        s.initSign(key);
+        s.update(text.getBytes(StandardCharsets.UTF_8));
+        return s.sign();
+    }
+
+    private static String string(JsonObject o, String name) {
+        JsonElement e = o.get(name);
+        if (e == null || !e.isJsonPrimitive()) throw new IllegalArgumentException("certificate reply has no " + name);
+        return e.getAsString();
+    }
+
+    /** The DER inside a PEM block (any label; Mojang labels PKCS#8 keys "RSA PRIVATE KEY"). */
+    static byte[] pem(String text) {
+        StringBuilder b64 = new StringBuilder();
+        for (String line : text.split("\\r?\\n")) {
+            String t = line.trim();
+            if (t.isEmpty() || t.startsWith("-----")) continue;
+            b64.append(t);
+        }
+        return base64(b64.toString());
+    }
+
+    private static byte[] base64(String s) {
+        try {
+            byte[] d = Base64.getDecoder().decode(s);
+            if (d.length == 0) throw new IllegalArgumentException("empty key data");
+            return d;
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("bad base64 in certificate reply", e);
         }
     }
 
@@ -78,13 +163,19 @@ public final class CapeSyncProtocol {
         return sb.toString();
     }
 
-    /** Request body for publishing a cape. */
-    public static String publishBody(String name, String cape, long ts, String nonce) {
+    /** Request body for publishing a cape (see services/cosmetics/src/lib.js). */
+    public static String publishBody(String cape, long ts, String nonce, PlayerCertificate cert, byte[] signature) {
+        Base64.Encoder b64 = Base64.getEncoder();
+        JsonObject key = new JsonObject();
+        key.addProperty("publicKey", b64.encodeToString(cert.publicKey));
+        key.addProperty("expiresAt", cert.expiresAtMs);
+        key.addProperty("signature", b64.encodeToString(cert.mojangSignature));
         JsonObject o = new JsonObject();
-        o.addProperty("name", name);
         o.addProperty("cape", cape);
         o.addProperty("ts", ts);
         o.addProperty("nonce", nonce);
+        o.add("key", key);
+        o.addProperty("signature", b64.encodeToString(signature));
         return o.toString();
     }
 

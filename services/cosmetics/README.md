@@ -5,13 +5,15 @@ one thing per Minecraft account: the id of the Night cape that account has equip
 
 ## How it works
 
-- **Publishing** (`PUT /v1/capes/<uuid>`): when you change your cape, your Night client
-  asks Mojang's session server to record a "join" for
-  `sha1("night-cape-v1|<uuid>|<cape>|<timestamp>|<nonce>")`, which is the same thing every
-  online Minecraft server does when you connect. The Worker checks that join with Mojang
-  (`hasJoined`) before it stores the cape, so only the owner of an account can set its cape.
-  The server id covers the cape and the time, so a captured request can't be replayed with a
-  different cape. Your Minecraft login token goes only to Mojang and never to this service.
+- **Publishing** (`PUT /v1/capes/<uuid>`): when you change your cape, your Night client gets
+  the account's Mojang player certificate (the key pair Minecraft 1.19+ signs chat with;
+  Mojang signs its public key together with the UUID and expiry) and signs
+  `night-cape-v1|<uuid>|<cape>|<timestamp>|<nonce>` with it. The Worker checks Mojang's
+  signature against Mojang's published player-certificate keys (`src/mojang-keys.js`), then
+  the player's signature, before it stores the cape, so only the owner of an account can set
+  its cape. Requests over two minutes old are refused. The Worker never contacts Mojang, and
+  your login token and private key never leave your PC. If Mojang ever rotates its keys,
+  copy the new `playerCertificateKeys` from https://api.minecraftservices.com/publickeys.
 - **Looking up** (`GET /v1/capes?uuids=a,b,...`, up to 100 per request): clients batch the
   players around them, cache answers for 5 minutes, and draw the capes themselves.
 - Only built-in catalog capes and Mojang-catalog capes are shared. Uploaded capes are local
@@ -53,4 +55,4 @@ The next Night release then shares capes. While `url` is empty, capes stay on yo
 npm test
 ```
 
-The tests use Node's built-in test runner, with stand-ins for KV and Mojang.
+The tests use Node's built-in test runner, with a stand-in for KV and test keys standing in for Mojang's.

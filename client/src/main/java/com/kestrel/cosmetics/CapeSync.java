@@ -6,7 +6,6 @@ import com.kestrel.KestrelClient;
 import com.kestrel.KestrelMod;
 import com.kestrel.config.ClientConfig;
 import com.kestrel.util.NightTls;
-import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.Session;
@@ -33,13 +32,13 @@ import java.util.concurrent.Executors;
  * Shares equipped Night capes between Night players through the Night
  * cosmetics service (services/cosmetics).
  *
- * <p><b>Publishing</b>: when your shareable cape changes, your client asks
- * Mojang's session server to record a "join" for a server id derived from
- * your UUID, the cape and a timestamp (what every online server does when you
- * connect), then tells the service your cape. The service confirms the join
- * with Mojang before storing it, so only you can set your cape. Your
- * Minecraft token goes to Mojang only, never to the service. Offline-mode
- * sessions cannot publish.
+ * <p><b>Publishing</b>: when your shareable cape changes, your client gets
+ * your account's Mojang player certificate (the key pair newer Minecraft
+ * versions sign chat with; Mojang signs its public key for your UUID), signs
+ * "cape, time, nonce" with it and sends that to the service, which checks
+ * both signatures before storing the cape. So only you can set your cape, and
+ * neither your Minecraft token nor the private key ever reaches the service.
+ * Offline-mode sessions cannot publish.
  *
  * <p><b>Lookups</b>: the UUIDs of real accounts around you are looked up in
  * batches (at most 100 per request, at most one request in flight), cached
@@ -58,6 +57,8 @@ public final class CapeSync {
     private static final long PUBLISH_RETRY_MS = 60 * 1000L;
     private static final int TIMEOUT_MS = 8000;
     private static final int MAX_REPLY = 64 * 1024;
+    private static final String CERTIFICATE_URL = "https://api.minecraftservices.com/player/certificates";
+    private static final long CERTIFICATE_MARGIN_MS = 10 * 60 * 1000L;
     /** Cached "no cape" marker. */
     private static final String NO_CAPE = "";
 
@@ -81,6 +82,10 @@ public final class CapeSync {
     private volatile boolean lookupRunning;
     private long lastLookupMs;
     private boolean lookupFailureLogged;
+
+    // Network thread only.
+    private CapeSyncProtocol.PlayerCertificate certificate;
+    private String certificateOwner;
 
     private volatile String published; // last cape the service accepted for this session
     private volatile boolean publishRunning;
@@ -144,7 +149,7 @@ public final class CapeSync {
         final String cape = want;
         net.execute(() -> {
             try {
-                publish(mc, session, cape);
+                publish(session, cape);
                 published = cape;
                 nextPublishMs = 0;
                 KestrelMod.LOG.info("[Kestrel] cape sharing: published {}", cape);
@@ -176,17 +181,16 @@ public final class CapeSync {
         return u != null && CapeSyncProtocol.lookupWorthy(u);
     }
 
-    private void publish(Minecraft mc, Session session, String cape) throws Exception {
-        GameProfile profile = session.getProfile();
-        String uuid = CapeSyncProtocol.uuid32(profile.getId());
+    private void publish(Session session, String cape) throws Exception {
+        String uuid = CapeSyncProtocol.uuid32(session.getProfile().getId());
+        CapeSyncProtocol.PlayerCertificate cert = certificate(session);
         long ts = System.currentTimeMillis() / 1000L;
         byte[] n = new byte[16];
         random.nextBytes(n);
         String nonce = CapeSyncProtocol.hex(n);
-        String serverId = CapeSyncProtocol.serverId(uuid, cape, ts, nonce);
-        // Proves account ownership to the service via Mojang; the token is sent to Mojang only.
-        mc.getSessionService().joinServer(profile, session.getToken(), serverId);
-        byte[] body = CapeSyncProtocol.publishBody(profile.getName(), cape, ts, nonce).getBytes(StandardCharsets.UTF_8);
+        // Signed with this account's Mojang-issued key; the private key and the login token never leave this PC.
+        byte[] signature = CapeSyncProtocol.sign(cert, CapeSyncProtocol.signedText(uuid, cape, ts, nonce));
+        byte[] body = CapeSyncProtocol.publishBody(cape, ts, nonce, cert, signature).getBytes(StandardCharsets.UTF_8);
         HttpURLConnection c = NightTls.open(new URL(baseUrl + "/v1/capes/" + uuid));
         try {
             c.setRequestMethod("PUT");
@@ -203,10 +207,51 @@ public final class CapeSync {
                 out.close();
             }
             int code = c.getResponseCode();
+            if (code == 403) certificate = null; // fetch a fresh one next time
             if (code != 204 && code != 200) throw new IOException("service answered HTTP " + code + ": " + errorText(c));
         } finally {
             c.disconnect();
         }
+    }
+
+    /**
+     * This account's Mojang player certificate, fetched from Mojang with the
+     * session token (sent to Mojang only) and kept in memory while it is valid
+     * (Mojang issues them for about two days). Network thread.
+     */
+    private CapeSyncProtocol.PlayerCertificate certificate(Session session) throws IOException {
+        CapeSyncProtocol.PlayerCertificate cert = certificate;
+        String owner = session.getPlayerID();
+        if (cert != null && owner.equals(certificateOwner)
+                && cert.usableAt(System.currentTimeMillis(), CERTIFICATE_MARGIN_MS)) {
+            return cert;
+        }
+        HttpURLConnection c = NightTls.open(new URL(CERTIFICATE_URL));
+        try {
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(TIMEOUT_MS);
+            c.setReadTimeout(TIMEOUT_MS);
+            c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + session.getToken());
+            c.setRequestProperty("Content-Type", "application/json");
+            c.setRequestProperty("User-Agent", "Night-Client/" + client.version());
+            c.setFixedLengthStreamingMode(0);
+            c.getOutputStream().close();
+            int code = c.getResponseCode();
+            if (code != 200) throw new IOException("Mojang player certificate: HTTP " + code + (code == 401
+                    ? " (sign in again in the launcher)" : ""));
+            cert = CapeSyncProtocol.parseCertificate(read(c.getInputStream()));
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Mojang player certificate: " + e.getMessage(), e);
+        } finally {
+            c.disconnect();
+        }
+        if (!cert.usableAt(System.currentTimeMillis(), CERTIFICATE_MARGIN_MS)) {
+            throw new IOException("Mojang player certificate is already expired (is the PC clock right?)");
+        }
+        certificate = cert;
+        certificateOwner = owner;
+        return cert;
     }
 
     // ---- lookups ------------------------------------------------------------

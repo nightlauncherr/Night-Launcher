@@ -2,10 +2,17 @@ package com.kestrel.cosmetics;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.Signature;
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -27,16 +34,58 @@ public class CapeSyncProtocolTest {
     }
 
     @Test
-    public void serverIdMatchesTheService() {
-        // Same input as services/cosmetics: sha1("night-cape-v1|uuid|cape|ts|nonce").
-        String id = CapeSyncProtocol.serverId("0123456789abcdef0123456789abcdef", "ember", 1800000000L,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        assertEquals(40, id.length());
-        assertEquals(id, CapeSyncProtocol.serverId("0123456789abcdef0123456789abcdef", "ember", 1800000000L,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
-        assertFalse(id.equals(CapeSyncProtocol.serverId("0123456789abcdef0123456789abcdef", "glacier",
-                1800000000L, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")));
-        assertEquals("8535a2580d22a544ba878513c8d0bf8f316e1a22", id); // same value pinned in services/cosmetics tests
+    public void signedTextMatchesTheService() {
+        // Same value pinned in services/cosmetics/test/index.test.js.
+        assertEquals("night-cape-v1|0123456789abcdef0123456789abcdef|ember|1800000000|"
+                        + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                CapeSyncProtocol.signedText("0123456789abcdef0123456789abcdef", "ember", 1800000000L,
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    }
+
+    /** A reply shaped like Mojang's (PKCS#8 under an "RSA PRIVATE KEY" label, microsecond expiry). */
+    private static String mojangReply(KeyPair kp, String expiresAt) {
+        Base64.Encoder mime = Base64.getMimeEncoder(76, "\n".getBytes());
+        return "{\"keyPair\":{\"privateKey\":\"-----BEGIN RSA PRIVATE KEY-----\\n"
+                + mime.encodeToString(kp.getPrivate().getEncoded()).replace("\n", "\\n")
+                + "\\n-----END RSA PRIVATE KEY-----\\n\",\"publicKey\":\"-----BEGIN RSA PUBLIC KEY-----\\n"
+                + mime.encodeToString(kp.getPublic().getEncoded()).replace("\n", "\\n")
+                + "\\n-----END RSA PUBLIC KEY-----\\n\"},\"publicKeySignature\":\"AAAA\","
+                + "\"publicKeySignatureV2\":\"3q2+7w==\",\"expiresAt\":\"" + expiresAt + "\","
+                + "\"refreshedAfter\":\"2026-11-07T10:00:00.123456Z\"}";
+    }
+
+    @Test
+    public void parsesMojangCertificatesAndSignsWithThem() throws Exception {
+        KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
+        g.initialize(2048);
+        KeyPair kp = g.generateKeyPair();
+        CapeSyncProtocol.PlayerCertificate cert =
+                CapeSyncProtocol.parseCertificate(mojangReply(kp, "2026-11-08T12:00:00.402874Z"));
+        assertArrayEquals(kp.getPublic().getEncoded(), cert.publicKey);
+        assertArrayEquals(kp.getPrivate().getEncoded(), cert.privateKey);
+        assertArrayEquals(new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}, cert.mojangSignature);
+        assertEquals(Instant.parse("2026-11-08T12:00:00.402Z").toEpochMilli(), cert.expiresAtMs);
+        assertTrue(cert.usableAt(cert.expiresAtMs - 20 * 60_000L, 10 * 60_000L));
+        assertFalse(cert.usableAt(cert.expiresAtMs - 5 * 60_000L, 10 * 60_000L));
+
+        String text = CapeSyncProtocol.signedText("0123456789abcdef0123456789abcdef", "ember", 1800000000L, "ab");
+        byte[] sig = CapeSyncProtocol.sign(cert, text);
+        Signature v = Signature.getInstance("SHA256withRSA");
+        v.initVerify(kp.getPublic());
+        v.update(text.getBytes(StandardCharsets.UTF_8));
+        assertTrue(v.verify(sig));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void certificateWithoutKeysIsRejected() {
+        CapeSyncProtocol.parseCertificate("{\"publicKeySignatureV2\":\"AAAA\",\"expiresAt\":\"2026-11-08T12:00:00Z\"}");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void certificateWithBadExpiryIsRejected() throws Exception {
+        KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
+        g.initialize(1024);
+        CapeSyncProtocol.parseCertificate(mojangReply(g.generateKeyPair(), "tomorrow"));
     }
 
     @Test
@@ -64,8 +113,11 @@ public class CapeSyncProtocolTest {
 
     @Test
     public void publishBodyHasTheServiceFields() {
-        assertEquals("{\"name\":\"Steve\",\"cape\":\"ember\",\"ts\":1800000000,\"nonce\":\"ab\"}",
-                CapeSyncProtocol.publishBody("Steve", "ember", 1800000000L, "ab"));
+        CapeSyncProtocol.PlayerCertificate cert = new CapeSyncProtocol.PlayerCertificate(
+                new byte[] {9}, new byte[] {1, 2, 3}, new byte[] {4, 5}, 1800000000123L);
+        assertEquals("{\"cape\":\"ember\",\"ts\":1800000000,\"nonce\":\"ab\",\"key\":{\"publicKey\":\"AQID\","
+                        + "\"expiresAt\":1800000000123,\"signature\":\"BAU=\"},\"signature\":\"Bwg=\"}",
+                CapeSyncProtocol.publishBody("ember", 1800000000L, "ab", cert, new byte[] {7, 8}));
         assertNull(CapeSyncProtocol.parseUuid32("zz"));
     }
 }

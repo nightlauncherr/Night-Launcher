@@ -1,29 +1,35 @@
-// Night cosmetics service (logic; the Worker entry is index.js): which Night cape each Minecraft account has equipped,
-// so Night clients can show each other's capes.
+// Night cosmetics service (logic; the Worker entry is index.js): which Night cape
+// each Minecraft account has equipped, so Night clients can show each other's capes.
 //
 // GET /v1/capes?uuids=<uuid>,<uuid>,...   (up to 100, dashed or not)
 //     -> 200 {"capes": {"<uuid>": "<cape id>", ...}}   only accounts with a cape
-// PUT /v1/capes/<uuid>  {"name", "cape", "ts", "nonce"}
-//     -> 204 when stored. Ownership is proven the way Minecraft servers do it:
-//        the client asks Mojang's session server to record a "join" for
-//        serverId = sha1("night-cape-v1|uuid|cape|ts|nonce"), and this service
-//        checks it with hasJoined. The serverId binds the cape and time, so a
-//        captured request cannot set a different cape or be reused later.
-//        The client's Minecraft token never reaches this service.
+// PUT /v1/capes/<uuid>  {"cape", "ts", "nonce", "key": {"publicKey", "expiresAt", "signature"}, "signature"}
+//     -> 204 when stored.
+//
+// Ownership is proven with the account's Mojang player certificate (the key pair
+// Minecraft 1.19+ uses to sign chat), so this service never contacts Mojang and never
+// sees a login token or private key:
+//   1. key.signature is Mojang's signature (SHA1withRSA, one of Mojang's
+//      playerCertificateKeys) over  uuid (16 bytes) || expiresAt (8 bytes, ms) || publicKey (DER),
+//      which binds the player's public key to this UUID until expiresAt;
+//   2. signature is the player's signature (SHA256withRSA, that public key) over
+//      "night-cape-v1|<uuid>|<cape>|<ts>|<nonce>", which binds the cape and time.
+// Requests older than two minutes are refused, so a captured request cannot be reused later.
 //
 // Storage: Workers KV namespace bound as CAPES, key = uuid (32 hex, no dashes).
 
+import { PLAYER_CERTIFICATE_KEYS } from "./mojang-keys.js";
+
 export const PROTOCOL = "night-cape-v1";
 const MAX_LOOKUP = 100;
-const MAX_BODY = 1024;
+const MAX_BODY = 4096;
 const MAX_SKEW_SECONDS = 120;
 const UUID_RE = /^[0-9a-f]{32}$/;
-const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;
 const NONCE_RE = /^[0-9a-f]{16,64}$/;
+const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 // Built-in catalog ids and Mojang catalog ids; "none" removes the entry.
 // Uploaded (custom:) capes are local images and are never shared.
 const CAPE_RE = /^(none|[a-z0-9_]{1,48}|mojang:[a-z0-9_]{1,48})$/;
-const HAS_JOINED = "https://sessionserver.mojang.com/session/minecraft/hasJoined";
 
 export function normalizeUuid(raw) {
   if (typeof raw !== "string") return null;
@@ -31,10 +37,40 @@ export function normalizeUuid(raw) {
   return UUID_RE.test(u) ? u : null;
 }
 
-export async function serverIdFor(uuid, cape, ts, nonce) {
-  const data = new TextEncoder().encode(`${PROTOCOL}|${uuid}|${cape}|${ts}|${nonce}`);
-  const digest = await crypto.subtle.digest("SHA-1", data);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+/** The text the player's key signs. Must match CapeSyncProtocol.signedText in the client. */
+export function signedText(uuid, cape, ts, nonce) {
+  return `${PROTOCOL}|${uuid}|${cape}|${ts}|${nonce}`;
+}
+
+/** What Mojang signs for a player certificate (Minecraft's ProfilePublicKey "V2" payload). */
+export function certificatePayload(uuid, expiresAtMs, publicKeyDer) {
+  const out = new Uint8Array(24 + publicKeyDer.length);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < 16; i++) out[i] = parseInt(uuid.substr(i * 2, 2), 16);
+  view.setBigInt64(16, BigInt(expiresAtMs));
+  out.set(publicKeyDer, 24);
+  return out;
+}
+
+export function b64decode(s) {
+  if (typeof s !== "string" || s.length === 0 || s.length > 4096 || !B64_RE.test(s)) return null;
+  try {
+    const bin = atob(s);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function verify(spkiDer, hash, signature, data) {
+  try {
+    const key = await crypto.subtle.importKey("spki", spkiDer, { name: "RSASSA-PKCS1-v1_5", hash }, false, ["verify"]);
+    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, data);
+  } catch {
+    return false;
+  }
 }
 
 function json(status, body, extra = {}) {
@@ -68,7 +104,7 @@ async function lookup(url, env) {
   return json(200, { capes }, { "cache-control": "public, max-age=60" });
 }
 
-async function publish(request, uuidPart, env, now, fetchImpl) {
+async function publish(request, uuidPart, env, now, mojangKeys) {
   const uuid = normalizeUuid(uuidPart);
   if (!uuid) return error(400, "invalid uuid");
   const len = Number(request.headers.get("content-length") || "0");
@@ -81,32 +117,31 @@ async function publish(request, uuidPart, env, now, fetchImpl) {
   } catch {
     return error(400, "body must be JSON");
   }
-  const { name, cape, ts, nonce } = body || {};
-  if (typeof name !== "string" || !NAME_RE.test(name)) return error(400, "invalid name");
+  const { cape, ts, nonce, key, signature } = body || {};
   if (typeof cape !== "string" || !CAPE_RE.test(cape)) return error(400, "invalid cape");
   if (!Number.isInteger(ts) || Math.abs(now - ts) > MAX_SKEW_SECONDS) return error(400, "stale or invalid ts");
   if (typeof nonce !== "string" || !NONCE_RE.test(nonce)) return error(400, "invalid nonce");
+  if (!key || typeof key !== "object") return error(400, "missing key");
+  const publicKey = b64decode(key.publicKey);
+  const keySignature = b64decode(key.signature);
+  const sig = b64decode(signature);
+  if (!publicKey || !keySignature || !sig) return error(400, "invalid key or signature encoding");
+  if (!Number.isSafeInteger(key.expiresAt)) return error(400, "invalid key expiry");
+  if (key.expiresAt <= now * 1000) return error(403, "player certificate expired");
 
-  const serverId = await serverIdFor(uuid, cape, ts, nonce);
-  const check = `${HAS_JOINED}?username=${encodeURIComponent(name)}&serverId=${serverId}`;
-  let res;
-  try {
-    res = await fetchImpl(check, { headers: { "user-agent": "Night-Cosmetics/1" } });
-  } catch {
-    return error(502, "session server unreachable");
+  // 1. Mojang vouches that this public key belongs to this UUID.
+  const payload = certificatePayload(uuid, key.expiresAt, publicKey);
+  let vouched = false;
+  for (const k of mojangKeys) {
+    if (await verify(k, "SHA-1", keySignature, payload)) {
+      vouched = true;
+      break;
+    }
   }
-  if (res.status !== 200) {
-    // 204: Mojang has no matching join. Anything else: Mojang refused or failed the check.
-    console.log(`hasJoined for ${name} answered ${res.status}`);
-    return error(403, `session not verified (mojang ${res.status})`);
-  }
-  let profile;
-  try {
-    profile = await res.json();
-  } catch {
-    return error(403, "session not verified");
-  }
-  if (!profile || normalizeUuid(profile.id) !== uuid) return error(403, "session is for another account");
+  if (!vouched) return error(403, "player certificate not signed by Mojang for this account");
+  // 2. The owner of that key asked for this cape, now.
+  const data = new TextEncoder().encode(signedText(uuid, cape, ts, nonce));
+  if (!(await verify(publicKey, "SHA-256", sig, data))) return error(403, "signature does not match");
 
   // Write only on change: KV writes are the scarce resource on the free plan.
   const current = await env.CAPES.get(uuid, "json");
@@ -118,11 +153,17 @@ async function publish(request, uuidPart, env, now, fetchImpl) {
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 }
 
-export async function handle(request, env, { now = Math.floor(Date.now() / 1000), fetchImpl = fetch } = {}) {
+let defaultKeys;
+function mojangKeysDefault() {
+  if (!defaultKeys) defaultKeys = PLAYER_CERTIFICATE_KEYS.map((k) => b64decode(k));
+  return defaultKeys;
+}
+
+export async function handle(request, env, { now = Math.floor(Date.now() / 1000), mojangKeys } = {}) {
   const url = new URL(request.url);
   if (url.pathname === "/v1/capes" && request.method === "GET") return lookup(url, env);
   const m = url.pathname.match(/^\/v1\/capes\/([^/]+)$/);
-  if (m && request.method === "PUT") return publish(request, m[1], env, now, fetchImpl);
+  if (m && request.method === "PUT") return publish(request, m[1], env, now, mojangKeys || mojangKeysDefault());
   if (url.pathname === "/" && request.method === "GET") return json(200, { service: "night-cosmetics", protocol: PROTOCOL });
   return error(404, "not found");
 }
