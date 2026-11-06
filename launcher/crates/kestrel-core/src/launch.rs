@@ -47,7 +47,13 @@ pub fn parse_request(line: &str, token: &str) -> Option<(u32, GameRequest)> {
     }
     let needle = format!("{REQUEST_MARKER}{token} ");
     let rest = &line[line.find(&needle)? + needle.len()..];
-    let mut parts = rest.split_whitespace();
+    // The game's console output is log4j XML: the message sits in a CDATA
+    // section, so the request ends where `]]>` (or any markup) begins.
+    let end = rest
+        .find("]]>")
+        .or_else(|| rest.find('<'))
+        .unwrap_or(rest.len());
+    let mut parts = rest[..end].split_whitespace();
     let n = parts.next()?;
     if n.is_empty() || n.len() > 9 || !n.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -435,6 +441,17 @@ mod tests {
         assert_eq!(parse_request(&line("1 accounts extra"), t), None);
         assert_eq!(parse_request(&line("1 delete-everything"), t), None);
         assert_eq!(parse_request(&line("1 accounts"), ""), None);
+        // What Minecraft's XML console layout actually prints.
+        let xml = format!(
+            "    <log4j:Message><![CDATA[[Kestrel] request {t} 4 switch {u}]]></log4j:Message>"
+        );
+        assert_eq!(
+            parse_request(&xml, t),
+            Some((4, GameRequest::Switch(u.to_ascii_lowercase())))
+        );
+        let xml =
+            format!("<log4j:Message><![CDATA[[Kestrel] request {t} 1 accounts]]></log4j:Message>");
+        assert_eq!(parse_request(&xml, t), Some((1, GameRequest::Accounts)));
     }
 
     fn state() -> InstallState {
