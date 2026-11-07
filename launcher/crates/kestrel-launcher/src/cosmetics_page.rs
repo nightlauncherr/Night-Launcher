@@ -161,7 +161,12 @@ impl CosmeticsPage {
         self.account_uuid = uuid.map(str::to_string);
         let key = (self.account_uuid.clone(), entitlements::generation());
         if self.official_for.as_ref() != Some(&key) {
-            self.official = entitlements::official_capes(self.layout.root(), uuid);
+            let official = entitlements::official_capes(self.layout.root(), uuid);
+            if official != self.official {
+                // A "redeem to unlock" note no longer applies to this account.
+                self.message = None;
+            }
+            self.official = official;
             self.official_for = Some(key);
         }
     }

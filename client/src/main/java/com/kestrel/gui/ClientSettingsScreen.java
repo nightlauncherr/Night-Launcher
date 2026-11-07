@@ -828,7 +828,10 @@ public final class ClientSettingsScreen extends GuiScreen {
             if (CapeManager.NONE.equals(cfg().cosmetics.cape) || !cfg().cosmetics.capesEnabled) {
                 mc.fontRendererObj.drawString(s, cx - mc.fontRendererObj.getStringWidth(s) / 2, cy - 4, Theme.MUTED);
             } else {
-                String l = "Loading...";
+                // A refused cape (locked official cape, another account's cape) says why;
+                // otherwise its texture is still loading.
+                String why = client.capes().lastError();
+                String l = why == null ? "Loading..." : mc.fontRendererObj.trimStringToWidth("Not shown: " + why, contentW - 20);
                 mc.fontRendererObj.drawString(l, cx - mc.fontRendererObj.getStringWidth(l) / 2, cy - 4, Theme.MUTED);
             }
             return;
