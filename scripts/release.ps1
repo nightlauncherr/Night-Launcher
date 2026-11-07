@@ -11,7 +11,7 @@
   5. Checks the exe's DLL imports (when dumpbin is available).
   6. Leaves only NightLauncher.exe (+ a SHA-256 text file) in release\.
   Minecraft, Forge and Java 8 are NOT bundled: Night Launcher downloads them from the
-  official servers into %LOCALAPPDATA%\Kestrel on first launch.
+  official servers into %LOCALAPPDATA%\Night Launcher on first launch.
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 #>
@@ -136,5 +136,5 @@ Write-Host "  Size:    $sizeMb MB"
 Write-Host "  SHA-256: $hash"
 Write-Host "  Updates: $(if ($update) { "enabled ($($update.Repo), key $($update.KeyId))" } else { 'not configured' })"
 Write-Host "  Log:     $logFile"
-Write-Host "Copy NightLauncher.exe anywhere (Desktop, another PC) and run it. Game files go to %LOCALAPPDATA%\Kestrel."
+Write-Host "Copy NightLauncher.exe anywhere (Desktop, another PC) and run it. Game files go to %LOCALAPPDATA%\Night Launcher."
 try { Stop-Transcript | Out-Null } catch { }

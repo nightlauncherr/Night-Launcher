@@ -3,7 +3,7 @@
   End-to-end test of the launcher self-updater with real Windows executables.
 .DESCRIPTION
   Developer test only. Nothing here is ever published, and it does not touch
-  your real %LOCALAPPDATA%\Kestrel or your NightLauncher.exe.
+  your real %LOCALAPPDATA%\Night Launcher or your NightLauncher.exe.
 
   -Mode prepare (default)
     1. Builds the client mod.

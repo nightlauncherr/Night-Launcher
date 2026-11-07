@@ -1,10 +1,10 @@
 # Troubleshooting
 
 Logs:
-- Launcher: `%LOCALAPPDATA%\Kestrel\logs\launcher.log` (previous run: `launcher.prev.log`;
+- Launcher: `%LOCALAPPDATA%\Night Launcher\logs\launcher.log` (previous run: `launcher.prev.log`;
   crashes: `launcher-crash-*.txt`).
-- Game: `%LOCALAPPDATA%\Kestrel\logs\latest.log` and `game-*.log` (tokens are redacted).
-- Forge: `%LOCALAPPDATA%\Kestrel\instance\logs\fml-client-latest.log`.
+- Game: `%LOCALAPPDATA%\Night Launcher\logs\latest.log` and `game-*.log` (tokens are redacted).
+- Forge: `%LOCALAPPDATA%\Night Launcher\instance\logs\fml-client-latest.log`.
 - Night Launcher → Logs (bottom of the sidebar) shows both live and has "Copy all".
 
 | Symptom | Cause / fix |
@@ -32,7 +32,7 @@ Logs:
 | Cosmetics page: "Upload rejected: …" | The message says why (not a PNG, wrong size/aspect, too large). Cape: 64x32 or multiples, ≤ 2 MB. Sky: 3:2, 384–3072 px wide, ≤ 16 MB |
 | Cosmetics page stays "Pending" | Normal until the game starts; the client applies it on launch (or within ~1 s while running). Check `latest.log` for "applied cosmetics from launcher" |
 | Card shows "invalid image" | A file in the capes/skies folder is not a valid image; remove it with the card's Remove button |
-| Launcher window never opens (VMs, old drivers) | Night Launcher tries OpenGL, then Direct3D 12 (incl. Windows' software renderer), and shows an error box if both fail. In a VM enable 3D acceleration and install guest tools — Minecraft itself still needs OpenGL 2.0+. Choose the renderer in Settings → Advanced → Renderer, or for one launch with `NightLauncher.exe --renderer opengl` / `--renderer d3d`. A renderer that only worked as the fallback is remembered in `%LOCALAPPDATA%\Kestrel\renderer-fallback.txt` |
+| Launcher window never opens (VMs, old drivers) | Night Launcher tries OpenGL, then Direct3D 12 (incl. Windows' software renderer), and shows an error box if both fail. In a VM enable 3D acceleration and install guest tools — Minecraft itself still needs OpenGL 2.0+. Choose the renderer in Settings → Advanced → Renderer, or for one launch with `NightLauncher.exe --renderer opengl` / `--renderer d3d`. A renderer that only worked as the fallback is remembered in `%LOCALAPPDATA%\Night Launcher\renderer-fallback.txt` |
 | Launcher window flashes washed-out frames, or the desktop stutters while moving/hovering the launcher | Direct3D 12 hit by the Multi-Plane Overlay issue on some NVIDIA/Windows 10 systems. Settings → Advanced → Renderer → OpenGL (the default since 0.4.1) |
 | Settings → Updates: "Not configured in this build" | The exe was built before `scripts\setup-updates.ps1` was run. Run it, rebuild with `release.ps1` and install that exe once |
 | Update check: "no release found" | Nothing published yet, the repo is private, or the release lacks `kestrel-update.json`. See UPDATES.md |

@@ -6,7 +6,7 @@ it shows **A Night Launcher update is available** with the current and new versi
 the release notes, **Update Now** and **Later**. Update Now downloads the new
 `NightLauncher.exe`, verifies it, swaps it in, and restarts into the new version.
 Your settings, Minecraft files, accounts, logs and cosmetics in
-`%LOCALAPPDATA%\Kestrel` are never touched.
+`%LOCALAPPDATA%\Night Launcher` are never touched.
 
 | Situation | Behaviour |
 |---|---|
@@ -16,7 +16,7 @@ Your settings, Minecraft files, accounts, logs and cosmetics in
 | Minecraft is running | **Update Now** is disabled until you close the game. |
 | Download interrupted, checksum wrong, self-test fails | Nothing is installed; the error is shown with **Retry**. The current version keeps working. |
 | New version crashes on start-up | The old launcher puts itself back automatically and shows what happened. |
-| Night Launcher is in a folder you can't write to (e.g. `C:\Program Files`) | The original is left untouched. The verified new version is installed to `%LOCALAPPDATA%\Kestrel\app\NightLauncher.exe` (which keeps updating itself from then on), with **Start new version** / **Open folder** buttons. No admin rights are requested. |
+| Night Launcher is in a folder you can't write to (e.g. `C:\Program Files`) | The original is left untouched. The verified new version is installed to `%LOCALAPPDATA%\Night Launcher\app\NightLauncher.exe` (which keeps updating itself from then on), with **Start new version** / **Open folder** buttons. No admin rights are requested. |
 | Release marked as required (`minimum_supported` newer than your version) | Version 0.3.0 and newer: the prompt says "required", **Later** only closes the window, and **Play is blocked** (button shows *UPDATE REQUIRED*, Home shows an *Update now* banner) until the update is installed. The required minimum is saved in `launcher.json` (`update_required_minimum`), so it stays enforced offline; it clears itself once the launcher is new enough or a check finds no required release. Required updates are checked at every start, even with *Show new versions automatically* turned off. Versions 0.2.x and older only show the "required" prompt at every start; their Play button was never blocked. |
 
 Settings → **Updates**: installed version, update source, *Show new versions
@@ -138,7 +138,7 @@ NightLauncher.exe starts ─▶ background thread: GET releases/latest/download/
                     ─▶ validate: product, channel, semver, HTTPS URL on an allowed host,
                        .exe, 64-hex SHA-256, plausible size
                     ─▶ newer than this version and not dismissed? show the window
-Update Now ─▶ download to %LOCALAPPDATA%\Kestrel\updates\NightLauncher-x.y.z.exe.part
+Update Now ─▶ download to %LOCALAPPDATA%\Night Launcher\updates\NightLauncher-x.y.z.exe.part
            ─▶ exact size + SHA-256 from the signed manifest, then rename
            ─▶ PE header check, then run  <new> --self-check  in a scratch folder:
               must exit 0, embed the client mod, and report version x.y.z
@@ -164,7 +164,7 @@ comparison, up-to-date / update-available / dismissed ("Later") decisions, signe
 and tampered manifests, malformed metadata, offline and server errors, unsafe
 redirects, checksum mismatches, interrupted and over-long downloads, the exe swap
 (including a Windows-only test that swaps out a *running* exe), rollback, a
-read-only install folder, cleanup, and that `%LOCALAPPDATA%\Kestrel` user data is
+read-only install folder, cleanup, and that `%LOCALAPPDATA%\Night Launcher` user data is
 left untouched. The release service is mocked; no public release is needed.
 
 End-to-end with real Windows executables (developer test, nothing is published):

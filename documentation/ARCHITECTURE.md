@@ -143,7 +143,7 @@ the screen says switching needs the launcher.
 - At runtime `install::resolve_mod` writes the embedded jar once to
   `<root>/cache/client/` (only if its SHA-1 differs) and installs it into `instance/mods`.
   Lookup order: `%KESTREL_MOD_JAR%` → embedded → `<exe dir>/client/` (dev builds).
-- Nothing is extracted to temporary folders; all state is under `%LOCALAPPDATA%\Kestrel`.
+- Nothing is extracted to temporary folders; all state is under `%LOCALAPPDATA%\Night Launcher`.
 - `NightLauncher.exe --self-check <file>` verifies the embedded mod (valid jar with `mcmod.info`
   and the mod class), unpacking, icon and every bundled preview, without opening a window.
 

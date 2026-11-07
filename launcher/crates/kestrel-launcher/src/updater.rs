@@ -988,23 +988,33 @@ fn spawn_new(
 
 /// Start-up hook for the new version: report health and clean up leftovers.
 /// Also removes a stale backup left by any earlier update.
-pub fn on_startup(layout: &Layout, args: &[String]) -> Option<String> {
-    let arg = |name: &str| {
-        args.iter()
-            .position(|a| a == name)
-            .and_then(|i| args.get(i + 1))
-            .cloned()
-    };
-    let updated_from = arg("--post-update");
-    let mut marker: Option<PathBuf> = None;
-    if let Some(h) = arg("--update-health") {
-        let h = PathBuf::from(h);
-        // Only ever create the marker inside our own updates folder.
-        if h.parent() == Some(update::updates_dir(layout).as_path()) {
-            let _ = std::fs::write(&h, b"ok");
-            marker = Some(h);
-        }
+fn arg_value(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+}
+
+/// Tell the launcher that just updated us that we started (`--update-health
+/// <file>`). Called as soon as the window exists, before any data move, so a
+/// long first-start copy can't look like a failed start. The marker is only
+/// written inside the `updates` folder of one of `roots` (the folder in use,
+/// and the old one an updating 1.1.0 launcher still points at).
+pub fn report_health(args: &[String], roots: &[PathBuf]) -> Option<PathBuf> {
+    let h = PathBuf::from(arg_value(args, "--update-health")?);
+    let ok = roots
+        .iter()
+        .any(|r| h.parent() == Some(update::updates_dir(&Layout::new(r.clone())).as_path()));
+    if !ok {
+        log::warn!("ignoring an update-health path outside the updates folder");
+        return None;
     }
+    let _ = std::fs::write(&h, b"ok");
+    Some(h)
+}
+
+pub fn on_startup(layout: &Layout, args: &[String], marker: Option<PathBuf>) -> Option<String> {
+    let updated_from = arg_value(args, "--post-update");
     if let Ok(exe) = std::env::current_exe() {
         let updates = update::updates_dir(layout);
         let wait = if updated_from.is_some() {
@@ -1093,11 +1103,24 @@ mod tests {
                 p.display().to_string(),
             ]
         };
-        assert!(on_startup(&layout, &args(&good)).unwrap().contains("0.1.0"));
+        let root = vec![d.clone()];
+        let marker = report_health(&args(&good), &root);
+        assert_eq!(marker.as_deref(), Some(good.as_path()));
+        assert!(
+            on_startup(&layout, &args(&good), marker)
+                .unwrap()
+                .contains("0.1.0")
+        );
         assert!(good.exists());
-        on_startup(&layout, &args(&evil));
+        assert!(report_health(&args(&evil), &root).is_none());
         assert!(!evil.exists());
-        assert!(on_startup(&layout, &["NightLauncher.exe".into()]).is_none());
+        // An updating 1.1.0 launcher points at the old folder's updates directory.
+        let old = d.join("Kestrel");
+        std::fs::create_dir_all(old.join("updates")).unwrap();
+        let old_marker = old.join("updates").join("health-1.1.1");
+        assert!(report_health(&args(&old_marker), &[d.clone(), old.clone()]).is_some());
+        assert!(old_marker.exists());
+        assert!(on_startup(&layout, &["NightLauncher.exe".into()], None).is_none());
         let _ = std::fs::remove_dir_all(&d);
     }
 

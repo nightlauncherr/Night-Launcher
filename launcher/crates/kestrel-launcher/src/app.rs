@@ -210,6 +210,10 @@ pub struct LauncherApp {
     log_instance: String,
     instances_ui: instances_ui::State,
     accounts_ui: accounts_ui::State,
+    /// The pre-1.1.1 Kestrel folder, kept after its data was copied here
+    /// (offered for removal in Settings → Advanced).
+    legacy_dir: Option<PathBuf>,
+    legacy_confirm: bool,
     device_code: Option<DeviceCode>,
     toasts: Vec<Toast>,
     next_toast: u64,
@@ -237,12 +241,13 @@ pub struct LauncherApp {
 
 impl LauncherApp {
     pub fn new(
-        cc: &eframe::CreationContext<'_>,
+        ctx: &egui::Context,
         layout: Layout,
         launcher_log: LogBuffer,
         updated: Option<String>,
+        legacy_dir: Option<PathBuf>,
     ) -> Self {
-        theme::install(&cc.egui_ctx);
+        theme::install(ctx);
         let cfg = LauncherConfig::load(&layout.launcher_config());
         let install = InstallState::load(&layout.install_state());
         let install_problems = install
@@ -254,7 +259,7 @@ impl LauncherApp {
         let (tx, rx) = channel();
         let layout_for_cosmetics = layout.clone();
         // Starts the background update check (never blocks start-up).
-        let updater = Updater::new(layout.clone(), &cfg, &cc.egui_ctx);
+        let updater = Updater::new(layout.clone(), &cfg, ctx);
         let bundled_mod = crate::worker::bundled_mod(&layout);
         // Fullbright no longer has a launcher toggle (players use a mod for it), so
         // make sure the built-in one can't stay switched on with no way off.
@@ -278,7 +283,7 @@ impl LauncherApp {
         let mark = eframe::icon_data::from_png_bytes(crate::embedded::MARK_PNG)
             .ok()
             .map(|icon| {
-                cc.egui_ctx.load_texture(
+                ctx.load_texture(
                     "kestrel-mark",
                     egui::ColorImage::from_rgba_unmultiplied(
                         [icon.width as usize, icon.height as usize],
@@ -329,6 +334,8 @@ impl LauncherApp {
             discord: PresenceService::start(discord::system_connector()),
             launcher_started: presence::now_unix(),
             mark,
+            legacy_dir,
+            legacy_confirm: false,
             backdrop_time: 0.0,
             glow: None,
             home_h: 0.0,
@@ -1899,6 +1906,48 @@ impl LauncherApp {
                 }
             });
         });
+        if let Some(old) = self.legacy_dir.clone() {
+            ui.add_space(theme::GAP);
+            card(ui, |ui| {
+                theme::card_title(
+                    ui,
+                    "Old Kestrel folder",
+                    "Your data was copied from this folder (and checked) when Night Launcher moved to its own folder. \
+                     Night Launcher no longer uses it; it was kept untouched as a backup.",
+                );
+                ui.label(theme::muted(old.display().to_string()));
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    if theme::button(ui, Kind::Ghost, Some(Icon::Folder), "Open", true).clicked() {
+                        open_path(&old);
+                    }
+                    if self.legacy_confirm {
+                        if theme::button(ui, Kind::Danger, Some(Icon::Trash), "Move it to the Recycle Bin", true)
+                            .clicked()
+                        {
+                            self.legacy_confirm = false;
+                            match kestrel_core::datadir::remove_legacy(self.layout.root(), &old) {
+                                Ok(()) => {
+                                    log::info!("moved the old folder {} to the Recycle Bin", old.display());
+                                    self.legacy_dir = None;
+                                    self.notify(Status::Ok(
+                                        "The old Kestrel folder is in the Recycle Bin (restore it from there if needed).".into(),
+                                    ));
+                                }
+                                Err(e) => self.notify(Status::Error(format!("Couldn't remove the old folder: {e}"))),
+                            }
+                        }
+                        if theme::button(ui, Kind::Ghost, None, "Keep it", true).clicked() {
+                            self.legacy_confirm = false;
+                        }
+                    } else if theme::button(ui, Kind::Secondary, Some(Icon::Trash), "Remove old folder…", true)
+                        .clicked()
+                    {
+                        self.legacy_confirm = true;
+                    }
+                });
+            });
+        }
         dirty
     }
 

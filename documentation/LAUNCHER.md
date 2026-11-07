@@ -40,6 +40,7 @@ Windows display scale. Everything follows Windows scaling (100%, 125%, 150%, …
 | **About** | Versions, client mod, Java runtime, data directory, notes and licences. |
 | **Logs** | Live game output and the launcher log, with Open folder, Copy all and Clear. |
 
-Settings, accounts, game files and instances live in `%LOCALAPPDATA%\Kestrel` (the folder
-keeps the project's earlier name). The original game folder (`instance\`) is the Default
-instance; other instances are under `instances\`. See ARCHITECTURE.md for the layout.
+Settings, accounts, game files and instances live in `%LOCALAPPDATA%\Night Launcher` (copied
+from `%LOCALAPPDATA%\Kestrel` on first start for users of 1.1.0 and earlier). The original game
+folder (`instance\`) is the Default instance; other instances are under `instances\`. See
+DATA_FOLDERS.md for the full layout.

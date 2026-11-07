@@ -4,7 +4,7 @@ The launcher's **Mods** page (left navigation, under Cosmetics; called QoL befor
 has three tabs: **Mod Manager**, **Resource Packs** and **Performance presets**. Fullbright
 no longer has a launcher switch (since 0.10.0; use a Fullbright mod, which the Mod
 Manager can install). Everything works on Night's own
-game directory, `%LOCALAPPDATA%\Kestrel\instance` (the folder Minecraft is started with
+game directory, `%LOCALAPPDATA%\Night Launcher\instance` (the folder Minecraft is started with
 via `--gameDir`); your normal `.minecraft` is never touched.
 
 | Change | When it takes effect |
@@ -35,13 +35,13 @@ running, close the game before changing mods or packs.)
   256 MB, not empty, compatibility, same file name or same mod id already installed),
   copied to a temporary name Forge ignores, size-verified, then moved into
   `instance\mods` only if that name is free. Nothing is ever overwritten.
-* **Disable** moves the file to `%LOCALAPPDATA%\Kestrel\mods-disabled` (outside the
+* **Disable** moves the file to `%LOCALAPPDATA%\Night Launcher\mods-disabled` (outside the
   game folder, so Forge can't see it). **Enable** moves it back to `instance\mods`; it
   is refused if a file with that name is already active or the same mod id is already
   enabled (Forge can't load a mod twice). If the disabled folder already has a file
   with that name, the new one is stored as `name (2).jar` instead of overwriting.
 * **Remove** asks for confirmation, then moves the file to
-  `%LOCALAPPDATA%\Kestrel\mods-trash\<UTC timestamp>-<name>`. **Recently removed**
+  `%LOCALAPPDATA%\Night Launcher\mods-trash\<UTC timestamp>-<name>`. **Recently removed**
   lists these with **Restore** (puts the mod back as disabled). Delete the trash folder
   by hand to free the space.
 * **Night client** (`kestrel-<version>.jar`) is built into `NightLauncher.exe` and
@@ -108,7 +108,10 @@ atomically written, checked by the mod once per second). The QoL tab shows *Appl
 
 ## Files and folders
 
-| Path (under `%LOCALAPPDATA%\Kestrel`) | Purpose |
+Paths for the Default instance; other instances have the same files under
+`instances\<name>\` (with `mods-disabled` and `mods-trash` in `instances\<name>\night-launcher\`).
+
+| Path (under `%LOCALAPPDATA%\Night Launcher`) | Purpose |
 |---|---|
 | `instance\mods`, `instance\mods\1.8.9` | Active mods (Forge loads these) |
 | `mods-disabled` | Disabled mods (moved back on Enable) |

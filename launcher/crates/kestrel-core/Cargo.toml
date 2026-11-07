@@ -24,4 +24,4 @@ zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 tempfile = "3.27.0"
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_SystemInformation", "Win32_System_Memory"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_SystemInformation", "Win32_System_Memory", "Win32_System_Com", "Win32_UI_Shell", "Win32_Storage_FileSystem"] }

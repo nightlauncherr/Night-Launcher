@@ -24,7 +24,7 @@ QoL. All of them are client-side and visual or informational only. See
 `NightLauncher.exe` checks [GitHub Releases](https://github.com/nightlauncherr/Night-Launcher/releases)
 at start-up and offers new versions in a window (**Update Now** / **Later**). It verifies
 each one (Ed25519-signed manifest, SHA-256, self-test), swaps it in, and restarts. Your
-data in `%LOCALAPPDATA%\Kestrel` is kept.
+data in `%LOCALAPPDATA%\Night Launcher` is kept.
 
 Download the latest `NightLauncher.exe` from the Releases page once; after that it updates itself.
 
@@ -35,6 +35,8 @@ private signing key). Details, security notes and key backup are in
 
 See [documentation/BUILD.md](documentation/BUILD.md) for details, including Microsoft sign-in setup.
 
-Game data lives in `%LOCALAPPDATA%\Kestrel` (the folder keeps the project's earlier name so
-existing settings, accounts and cosmetics carry over) and never touches your normal `.minecraft`.
+Game data lives in `%LOCALAPPDATA%\Night Launcher` and never touches your normal `.minecraft`.
+If you used Night Launcher 1.1.0 or earlier (or Kestrel), your data in `%LOCALAPPDATA%\Kestrel`
+is copied over and checked on first start; the old folder is kept as a backup until you remove it.
+See [documentation/DATA_FOLDERS.md](documentation/DATA_FOLDERS.md).
 Not affiliated with Mojang or Microsoft.

@@ -169,7 +169,9 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
     };
 
     let prepared = (|| -> kestrel_core::Result<(launch::LaunchSpec, RunLock, String)> {
-        // 0. One game per instance folder, even across launcher windows.
+        // 0. This instance's folders (a new user, or folders removed by hand), then
+        // one game per instance folder, even across launcher windows.
+        layout.ensure()?;
         let lock = RunLock::acquire(&layout)?;
 
         // 1. Shared installation (fast path when the recorded files are intact).

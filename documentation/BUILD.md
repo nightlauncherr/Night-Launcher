@@ -54,7 +54,7 @@ throw-away data directory, checks the DLL imports, and prints the final size and
 
 `NightLauncher.exe` needs nothing else: no project folder, no .NET, no Java, no VC++ redistributable.
 On first Play it downloads Minecraft 1.8.9, Forge and Mojang's Java 8 from the official servers
-into `%LOCALAPPDATA%\Kestrel` (these are never bundled, for licensing reasons). Settings,
+into `%LOCALAPPDATA%\Night Launcher` (these are never bundled, for licensing reasons). Settings,
 game files, logs and uploaded cosmetics live there too, so moving or replacing the exe (an
 upgrade) keeps everything. A newer exe replaces only the client mod jar in `instance\mods`.
 
@@ -62,8 +62,9 @@ You can run the self-check yourself: `NightLauncher.exe --self-check report.txt`
 
 ## First launch
 
-1. Start `NightLauncher.exe`. Data goes to `%LOCALAPPDATA%\Kestrel` (override with
-   `NightLauncher.exe --root D:\Games\NightLauncher` or `%KESTREL_HOME%`).
+1. Start `NightLauncher.exe`. Data goes to `%LOCALAPPDATA%\Night Launcher` (override with
+   `NightLauncher.exe --root "D:\Games\Night Launcher"` or `%NIGHT_LAUNCHER_HOME%`; see
+   DATA_FOLDERS.md).
 2. **Offline mode** works immediately for singleplayer and offline-mode servers.
 3. Press **Play**. The first run downloads a few hundred MB (Minecraft, libraries, assets, Forge,
    Mojang's Java 8 runtime), verifying SHA-1 hashes where Mojang/Forge publish them.

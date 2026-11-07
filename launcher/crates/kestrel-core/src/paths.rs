@@ -1,6 +1,7 @@
 //! On-disk layout of a Kestrel installation.
 //!
-//! Default root is `%LOCALAPPDATA%\Kestrel` on Windows. Nothing here touches
+//! The root itself is chosen by `datadir` (`%LOCALAPPDATA%\Night Launcher` by
+//! default, migrated from the older `Kestrel` folder). Nothing here touches
 //! the user's regular `.minecraft` directory.
 
 use std::path::{Path, PathBuf};
@@ -48,26 +49,6 @@ impl Layout {
     /// The Default instance of this installation.
     pub fn default_instance(&self) -> Layout {
         Layout::new(self.root.clone())
-    }
-
-    /// Platform default root directory.
-    pub fn default_root() -> PathBuf {
-        #[cfg(windows)]
-        {
-            if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-                return PathBuf::from(dir).join("Kestrel");
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            if let Some(dir) = std::env::var_os("XDG_DATA_HOME") {
-                return PathBuf::from(dir).join("kestrel");
-            }
-            if let Some(home) = std::env::var_os("HOME") {
-                return PathBuf::from(home).join(".local/share/kestrel");
-            }
-        }
-        PathBuf::from("kestrel-data")
     }
 
     pub fn root(&self) -> &Path {

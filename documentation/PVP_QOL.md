@@ -3,7 +3,8 @@
 Nine client-side features in Night's in-game settings (**Right Shift → QoL**),
 grouped as Combat, HUD, Movement & Building and Visuals. Every one is **off by
 default**, has its own switch and description, shows its settings only while it is on,
-and is saved in `%LOCALAPPDATA%\Kestrel\config.json` (kept across restarts and updates).
+and is saved per instance in `<instance folder>\kestrel\config.json` (for the Default instance
+`%LOCALAPPDATA%\Night Launcher\instance\kestrel\config.json`; kept across restarts and updates).
 Nothing here sends extra packets, changes what the server sees, or moves, aims or acts
 for you.
 

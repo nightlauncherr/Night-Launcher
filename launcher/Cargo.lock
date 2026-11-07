@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-core"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1822,7 +1822,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-launcher"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1841,7 +1841,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-release"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "base64",
  "ed25519-dalek",

@@ -56,7 +56,7 @@ The downloaded image is validated like any imported file.
 
 ## Storage
 
-`%LOCALAPPDATA%\Kestrel\instance\kestrel\skins\` (or `<root>\instance\kestrel\skins\` with
+`%LOCALAPPDATA%\Night Launcher\instance\kestrel\skins\` (or `<root>\instance\kestrel\skins\` with
 `--root`):
 
 | File | Contents |

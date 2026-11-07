@@ -1,6 +1,6 @@
 # Custom skies
 
-Put PNG files in `%LOCALAPPDATA%\Kestrel\instance\kestrel\skies\` (Night menu → Sky →
+Put PNG files in `%LOCALAPPDATA%\Night Launcher\instance\kestrel\skies\` (Night menu → Sky →
 "Open custom skies folder"), then pick them under **Sky**.
 
 ## Format
