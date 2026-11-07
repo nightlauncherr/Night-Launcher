@@ -1,3 +1,4 @@
 # Public key of the Night cosmetics service's entitlement signatures (RSA, SubjectPublicKeyInfo DER, base64).
 # The private key exists only as the ENTITLEMENT_SIGNING_KEY secret of the night-cosmetics Worker.
 # Lines starting with # are ignored. Empty: this build can't check (or redeem) rewards.
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6p5B+qwA6J/D/2ndwkMtukPKsRGLVqQgQS9IKFd7AL/4Dq1vF2gCy0T28OvUf+dbb94FEgfUNeH3AzE8cdSgnr4Jl0utHkbkUQ4qjouxv6wxhKousHmVSsMl4j8HBJgb8roaZlfA5GAvFP804MD0MD0UB/M/sR1zxIzklpD3vdc7aQnsXFq1mwaT4OoVqVAxrkUscmnVcRnSU9/wu7XRApLnNfuxzINX07PTkvbe0qWJegSxpRNicNrYDgM/Gq4MjUZpaveZ62oUWbzagY9DU3n1+q32CEK4AXgRA4sPl1L0eSNoskcvqHLDMUlWAAHZCJRC3MuGUlNyx/7rigGkcwIDAQAB
