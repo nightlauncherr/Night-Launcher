@@ -53,6 +53,12 @@ The **Mojang** category lists 12 historical Mojang capes as *local Night cosmeti
 2011, 2012, 2013, 2015 and 2016, Realms MapMaker, Crafter, Translator, Mojang (Classic) and
 Mojang (2015) (the first and second Mojang staff designs), Cobalt and Mojira Moderator.
 
+They are the **official cape collection**, unlocked per Minecraft account by redeeming the code
+`LOVEMOJANG` on the launcher's **Redeem** page (see [REDEEM.md](REDEEM.md)); a few accounts have
+it built in. Without it they are listed as locked in the launcher, hidden in the in-game menu,
+not drawn on your player, and not shared: the cosmetics service refuses to publish an official
+cape for an account without the collection, and drops ones stored before it was required.
+
 - Your Night client draws the one you equip, and other Night players see it through cape
   sharing (below). It does not grant or change any account cape, and vanilla players don't
   see it. Like every Night cape, it replaces your official cape on your own player while

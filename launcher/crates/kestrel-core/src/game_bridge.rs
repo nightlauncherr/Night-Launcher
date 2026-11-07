@@ -72,6 +72,9 @@ pub struct Bridge {
     notify: Arc<dyn Fn(BridgeEvent) + Send + Sync>,
     /// Unfinished `add` requests, cancellable by number.
     pending: Arc<Mutex<HashMap<u32, SharedProgress>>>,
+    /// Data folder and this game's client data folder: on a switch, the new
+    /// account's rewards are handed to this game (see [`crate::entitlements`]).
+    game_data: Option<(PathBuf, PathBuf)>,
 }
 
 impl Bridge {
@@ -87,6 +90,31 @@ impl Bridge {
             client_id,
             notify: Arc::new(notify),
             pending: Arc::new(Mutex::new(HashMap::new())),
+            game_data: None,
+        }
+    }
+
+    /// Hand the switched-to account's rewards to this game (data folder, the
+    /// game's `kestrel` folder).
+    pub fn with_game_data(mut self, root: PathBuf, client_data: PathBuf) -> Bridge {
+        self.game_data = Some((root, client_data));
+        self
+    }
+
+    /// Refresh the account's rewards and copy them to this game, before the game
+    /// hears about the new session. Never fails the switch.
+    fn give_rewards(&self, uuid: &str) {
+        let Some((root, client_data)) = &self.game_data else {
+            return;
+        };
+        if !crate::entitlements::configured() {
+            return;
+        }
+        if let Err(e) = crate::entitlements::refresh(root, uuid) {
+            log::info!("rewards not refreshed on switch ({e}); using the saved ones");
+        }
+        if let Err(e) = crate::entitlements::copy_to_game(root, client_data, uuid) {
+            log::warn!("could not give the game the account's rewards: {e}");
         }
     }
 
@@ -131,6 +159,7 @@ impl Bridge {
         match auth::refresh_session(&self.client_id, &self.accounts, uuid) {
             Ok((session, _)) => {
                 redact::register(&session.access_token);
+                self.give_rewards(&session.uuid);
                 self.send(session_reply(n, &session));
                 // The launcher follows the game: the account it switched to becomes active.
                 let target = uuid.to_string();

@@ -271,9 +271,12 @@ public final class ClientSettingsScreen extends GuiScreen {
                     if (!CapeManager.NONE.equals(v)) co.capesEnabled = true;
                     changed();
                 }, (mc2, it, x, y, w, h) -> drawCapeThumb(mc2, capeOpts.get(it.id), x, y, w, h), CAPE_FILTER, 40, 64));
-                text("Mojang: historical Mojang capes (MINECON 2011-2016, Mojang staff, Mojira, Realms, ...), shown by Night "
-                        + "(other Night players see the one you equip). They do not grant or change any account cape. The original textures are "
-                        + "downloaded from Mojang's texture server the first time and kept on your PC.");
+                text(client.capes().officialCapesUnlocked()
+                        ? "Mojang: the official Minecraft capes (MINECON 2011-2016, Mojang staff, Mojira, Realms, ...), shown by Night "
+                                + "(other Night players see the one you equip). They do not grant or change any account cape. The original "
+                                + "textures are downloaded from Mojang's texture server the first time and kept on your PC."
+                        : "Mojang: the official Minecraft capes are locked on this account. Redeem the code LOVEMOJANG in "
+                                + "Night Launcher (Redeem page) to unlock the whole collection.");
                 content.add(new Toggle("Animate capes", () -> co.animatedCapes, v -> {
                     co.animatedCapes = v;
                     changed();

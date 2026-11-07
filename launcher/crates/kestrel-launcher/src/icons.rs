@@ -34,6 +34,8 @@ pub enum Icon {
     Edit,
     Stop,
     Star,
+    /// Wrapped present (redeem codes, rewards).
+    Gift,
 }
 
 /// Maps the 24x24 design grid into `rect`.
@@ -267,6 +269,19 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 })
                 .collect();
             closed(&pts);
+        }
+        Icon::Gift => {
+            closed(&[(3.5, 8.0), (20.5, 8.0), (20.5, 11.5), (3.5, 11.5)]);
+            closed(&[(5.0, 11.5), (19.0, 11.5), (19.0, 20.5), (5.0, 20.5)]);
+            line(&[(12.0, 8.0), (12.0, 20.5)]);
+            line(&[(12.0, 8.0), (9.6, 4.6), (7.0, 4.4), (7.0, 6.6), (12.0, 8.0)]);
+            line(&[
+                (12.0, 8.0),
+                (14.4, 4.6),
+                (17.0, 4.4),
+                (17.0, 6.6),
+                (12.0, 8.0),
+            ]);
         }
     }
 }

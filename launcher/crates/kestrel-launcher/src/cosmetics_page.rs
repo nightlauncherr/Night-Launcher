@@ -16,6 +16,7 @@ use kestrel_core::cosmetics::{
     self, CAPE_CATEGORIES, CAPE_NONE, CUSTOM_PREFIX, CosmeticSettings, KILL_EFFECT_CATEGORIES,
     KILL_EFFECTS, Kind, MOJANG_CATEGORY, MOJANG_PREFIX, Rgba, SKY_CATEGORIES,
 };
+use kestrel_core::entitlements;
 use kestrel_core::paths::Layout;
 
 use crate::app::{ACCENT, CARD, ERR, MUTED, OK, WARN, card};
@@ -103,6 +104,10 @@ pub struct CosmeticsPage {
     /// UUID of the signed-in Microsoft account (None offline / signed out),
     /// used only to decide which restricted catalog capes to offer.
     account_uuid: Option<String>,
+    /// Whether that account may use the official (Mojang) capes, and the
+    /// account + entitlement-cache generation it was worked out for.
+    official: bool,
+    official_for: Option<(Option<String>, u64)>,
     textures: HashMap<String, egui::TextureHandle>,
     preview_errors: HashMap<String, String>,
     requested: std::collections::HashSet<String>,
@@ -131,6 +136,8 @@ impl CosmeticsPage {
             custom_capes: Vec::new(),
             custom_skies: Vec::new(),
             account_uuid: None,
+            official: false,
+            official_for: None,
             textures: HashMap::new(),
             preview_errors: HashMap::new(),
             requested: Default::default(),
@@ -152,6 +159,18 @@ impl CosmeticsPage {
     /// ownership again in game; this only keeps the list honest.
     pub fn set_account(&mut self, uuid: Option<&str>) {
         self.account_uuid = uuid.map(str::to_string);
+        let key = (self.account_uuid.clone(), entitlements::generation());
+        if self.official_for.as_ref() != Some(&key) {
+            self.official = entitlements::official_capes(self.layout.root(), uuid);
+            self.official_for = Some(key);
+        }
+    }
+
+    /// Open the Capes tab on the official (Mojang) capes.
+    pub fn show_official_capes(&mut self) {
+        self.tab = Tab::Capes;
+        self.cape_filter.category = MOJANG_CATEGORY.0.into();
+        self.cape_filter.search.clear();
     }
 
     /// Re-read state from disk (called whenever the page is opened).
@@ -802,11 +821,14 @@ impl CosmeticsPage {
                     fps: c.animated().then(|| c.fps.unwrap_or(DEFAULT_CAPE_FPS)),
                 }),
         );
+        // Official capes are listed for everyone (with previews) but only
+        // equippable by accounts that own the collection.
+        let official = self.official;
         items.extend(cosmetics::mojang_capes().iter().map(|m| Item {
             id: m.selection_id(),
             name: m.name.clone(),
             category: MOJANG_CATEGORY.0.into(),
-            badge: None,
+            badge: (!official).then_some("LOCKED"),
             custom: false,
             fps: None,
         }));
@@ -821,7 +843,18 @@ impl CosmeticsPage {
         let reserved = cosmetics::cape_catalog()
             .iter()
             .find(|c| c.id == self.settings.cosmetics.cape && !c.allows(me));
-        if let Some(c) = reserved {
+        let equipped_official = cosmetics::mojang_cape(&self.settings.cosmetics.cape);
+        if let (Some(c), false) = (equipped_official, official) {
+            ui.label(
+                RichText::new(format!(
+                    "The equipped cape ({}) is an official cape this account hasn't unlocked, so it won't render. \
+                     Redeem the code LOVEMOJANG on the Redeem page, or choose another cape. It comes back on an account \
+                     that has the collection.",
+                    c.name
+                ))
+                .color(WARN),
+            );
+        } else if let Some(c) = reserved {
             ui.label(
                 RichText::new(format!(
                     "The equipped cape ({}) is reserved for another account and will not render. \
@@ -850,8 +883,8 @@ impl CosmeticsPage {
         if self.cape_filter.category == MOJANG_CATEGORY.0 {
             ui.label(
                 RichText::new(
-                    "Historical Mojang capes, as Night cosmetics: Night players see the one you equip, other \
-                     players don't, and it does not give your account that cape. \
+                    "Official Minecraft capes, as Night cosmetics: unlocked with the code LOVEMOJANG (Redeem page). \
+                     Night players see the one you equip, other players don't, and it does not give your account that cape. \
                      The original textures are downloaded from Mojang's texture server the first time and kept on your PC.",
                 )
                 .small()
@@ -928,6 +961,14 @@ impl CosmeticsPage {
                     if resp.clicked {
                         if id == CAPE_NONE {
                             self.settings.cosmetics.cape = CAPE_NONE.into();
+                        } else if id.starts_with(MOJANG_PREFIX) && !official {
+                            self.message = Some((
+                                false,
+                                format!(
+                                    "{name} is part of the official cape collection. Redeem the code LOVEMOJANG \
+                                     on the Redeem page to unlock it for this account."
+                                ),
+                            ));
                         } else {
                             self.settings.cosmetics.cape = id.clone();
                             self.settings.cosmetics.capes_enabled = true;

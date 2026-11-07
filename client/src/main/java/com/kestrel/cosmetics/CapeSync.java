@@ -95,6 +95,9 @@ public final class CapeSync {
     private long wantedSinceMs;
     private long nextPublishMs;
 
+    /** Whether the local account may share a cape id (official capes need the collection). */
+    private volatile java.util.function.Predicate<String> mayShare = id -> true;
+
     public CapeSync(KestrelClient client) {
         this.client = client;
         this.baseUrl = loadServiceUrl();
@@ -113,6 +116,11 @@ public final class CapeSync {
 
     public boolean enabled() {
         return net != null;
+    }
+
+    /** Set which cape ids the local account may share; others publish as none. */
+    void setShareFilter(java.util.function.Predicate<String> filter) {
+        this.mayShare = filter;
     }
 
     /** A player's shared cape id, or null (unknown, none, or sharing disabled). Game thread. */
@@ -135,6 +143,9 @@ public final class CapeSync {
     private void publishIfChanged(long now) {
         ClientConfig.Cosmetics c = client.config().cosmetics;
         String want = c.shareCape ? CapeSyncProtocol.shareable(c.capesEnabled, c.cape) : CapeSyncProtocol.NONE;
+        // An official cape the account hasn't unlocked isn't drawn locally, so it isn't shared either
+        // (the service would refuse it anyway).
+        if (!CapeSyncProtocol.NONE.equals(want) && !mayShare.test(want)) want = CapeSyncProtocol.NONE;
         if (!want.equals(wanted)) {
             wanted = want;
             wantedSinceMs = now;
@@ -343,7 +354,7 @@ public final class CapeSync {
         }
     }
 
-    private static String read(InputStream in) throws IOException {
+    static String read(InputStream in) throws IOException {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[4096];
@@ -368,7 +379,7 @@ public final class CapeSync {
     }
 
     /** The service URL from the bundled config, or null when sharing is not set up. */
-    private static String loadServiceUrl() {
+    static String loadServiceUrl() {
         try (InputStream in = CapeSync.class.getResourceAsStream(SERVICE_CONFIG)) {
             if (in == null) return null;
             JsonElement root = new JsonParser().parse(read(in));

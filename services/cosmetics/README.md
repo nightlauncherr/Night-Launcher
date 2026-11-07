@@ -22,6 +22,27 @@ one thing per Minecraft account: the id of the Night cape that account has equip
 Storage is one Workers KV namespace. The free plan covers small communities: about 100,000
 lookups and 1,000 cape changes per day. The Worker writes only when a cape actually changes.
 
+## Redeem codes
+
+`POST /v1/redeem` and `GET /v1/entitlements/<uuid>` handle cosmetic codes such as `LOVEMOJANG`
+(codes and rewards: `src/rewards.js`; details: `documentation/REDEEM.md`). Redemptions are signed
+with the same player certificate as cape publishing, stored under `ent:<uuid>`, and each
+account's rewards are answered as a document signed with the Worker secret
+`ENTITLEMENT_SIGNING_KEY` (base64 PKCS#8 RSA private key). Its public key is bundled in
+`client/src/main/resources/assets/kestrel/entitlement_public_key.txt`. Without the secret the
+service doesn't redeem or issue entitlements (503).
+
+The key is made once and never written to disk (on the PC, task `38-entitlement-key`):
+
+```
+node -e "const {generateKeyPairSync:g}=require('crypto');const k=g('rsa',{modulusLength:2048});\
+process.stdout.write(k.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'))" \
+  | npx wrangler secret put ENTITLEMENT_SIGNING_KEY
+```
+
+then put the matching public key (SPKI, base64) in that file. Replacing the key means a client
+release with the new public key; until then old clients can't verify new documents.
+
 ## Deploy (once, on your PC)
 
 You need a free Cloudflare account and Node.js 18 or newer (`node --version`).

@@ -20,6 +20,7 @@ use crate::icons::{self, Icon};
 use crate::logger::LogBuffer;
 use crate::presence::{self, Phase};
 use crate::qol_page::QolPage;
+use crate::redeem_page::{self, RedeemPage};
 use crate::skin_page::SkinPage;
 use crate::theme::{self, Kind, Tone};
 use crate::updater::{Summary, Updater};
@@ -45,6 +46,7 @@ enum Page {
     Home,
     Instances,
     Cosmetics,
+    Redeem,
     Mods,
     Settings,
     Account,
@@ -53,10 +55,11 @@ enum Page {
 }
 
 impl Page {
-    const NAV: [Page; 7] = [
+    const NAV: [Page; 8] = [
         Page::Home,
         Page::Instances,
         Page::Cosmetics,
+        Page::Redeem,
         Page::Mods,
         Page::Settings,
         Page::Account,
@@ -68,6 +71,7 @@ impl Page {
             Page::Home => "Home",
             Page::Instances => "Instances",
             Page::Cosmetics => "Cosmetics",
+            Page::Redeem => "Redeem",
             Page::Mods => "Mods",
             Page::Settings => "Settings",
             Page::Account => "Accounts",
@@ -81,6 +85,7 @@ impl Page {
             Page::Home => Icon::Home,
             Page::Instances => Icon::Layers,
             Page::Cosmetics => Icon::Cosmetics,
+            Page::Redeem => Icon::Gift,
             Page::Mods => Icon::Cube,
             Page::Settings => Icon::Settings,
             Page::Account => Icon::Account,
@@ -97,6 +102,9 @@ impl Page {
             }
             Page::Cosmetics => {
                 "Kill effects, skies, capes and your skin, shown in your Night client."
+            }
+            Page::Redeem => {
+                "Redeem codes for Night cosmetics and see what each account has unlocked."
             }
             Page::Mods => {
                 "Mods, resource packs and performance presets for Night's Minecraft 1.8.9."
@@ -223,6 +231,7 @@ pub struct LauncherApp {
     total_ram: Option<u64>,
     bundled_mod: Option<PathBuf>,
     cosmetics: CosmeticsPage,
+    redeem: RedeemPage,
     skin: SkinPage,
     qol: QolPage,
     updater: Updater,
@@ -329,6 +338,10 @@ impl LauncherApp {
             bundled_mod,
             qol: QolPage::new(layout_for_cosmetics.clone()),
             skin: SkinPage::new(layout_for_cosmetics.clone()),
+            redeem: RedeemPage::new(
+                layout_for_cosmetics.root().to_path_buf(),
+                layout_for_cosmetics.accounts(),
+            ),
             cosmetics: CosmeticsPage::new(layout_for_cosmetics),
             updater,
             discord: PresenceService::start(discord::system_connector()),
@@ -2286,6 +2299,8 @@ impl eframe::App for LauncherApp {
                                 // skin is previewed only for it, too.
                                 let inst = self.editing_instance().clone();
                                 let uuid = self.instance_uuid(&inst);
+                                // Official capes follow this account's rewards (fetched once per session).
+                                self.redeem.sync(uuid.as_deref(), ui.ctx());
                                 self.cosmetics.set_account(uuid.as_deref());
                                 self.skin.set_account(uuid.as_deref());
                                 let running = self.runs.get(&self.editing).is_some_and(Run::running);
@@ -2309,6 +2324,18 @@ impl eframe::App for LauncherApp {
                                 }
                             }
                             Page::About => self.about(ui),
+                            Page::Redeem => {
+                                let active = self.active().filter(|a| !a.needs_sign_in).cloned();
+                                let client_id = self.cfg.msa_client_id().to_string();
+                                match self.redeem.ui(ui, active.as_ref(), self.offline_mode, &client_id) {
+                                    Some(redeem_page::Action::OpenOfficialCapes) => {
+                                        self.cosmetics.show_official_capes();
+                                        self.go(Page::Cosmetics);
+                                    }
+                                    Some(redeem_page::Action::AccountsChanged) => self.reload_accounts(),
+                                    None => {}
+                                }
+                            }
                             Page::Logs => {}
                         }
                         ui.add_space(12.0);

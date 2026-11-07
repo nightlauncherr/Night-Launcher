@@ -37,6 +37,8 @@ All code gets these paths from one place: `kestrel_core::datadir` picks the fold
   assets\                  sounds, languages, log config                    (shared, read-only)
   runtime\                 managed Java 8                                   (shared, read-only)
   cache\                   downloaded thumbnails and similar; safe to delete
+  entitlements\            each account's signed rewards from redeemed codes (<uuid>.json);
+                           a copy goes to the game's kestrel\entitlements before each launch
   updates\                 launcher updates being downloaded/verified; cleaned up after updating
   app\NightLauncher.exe    only when the exe's own folder isn't writable (updates install here)
   logs\                    launcher.log, launcher.prev.log, Default instance game logs

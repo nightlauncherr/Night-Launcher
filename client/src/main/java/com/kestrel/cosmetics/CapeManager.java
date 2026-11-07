@@ -131,6 +131,7 @@ public final class CapeManager {
     private final CapeCatalog catalog;
     private final MojangCapes mojang;
     private final CapeSync sync;
+    private final EntitlementStore rewards;
     /** Cache of downloaded Mojang cape textures (shared with the launcher). */
     private final File mojangDir;
     private final Map<String, Loaded> cache = new HashMap<String, Loaded>();
@@ -149,6 +150,22 @@ public final class CapeManager {
         this.mojang = loadMojangCapes();
         this.mojangDir = new File(customDir.getParentFile(), "mojang-capes");
         this.sync = new CapeSync(client);
+        this.rewards = new EntitlementStore(new File(customDir.getParentFile(), "entitlements"),
+                CapeSync.loadServiceUrl(), "Night-Client/" + client.version());
+        this.sync.setShareFilter(id -> !id.startsWith(MojangCapes.PREFIX) || officialCapesUnlocked());
+    }
+
+    /** Rewards of the accounts this game plays as. */
+    public EntitlementStore rewards() {
+        return rewards;
+    }
+
+    /**
+     * Whether the local account owns the official (Mojang) cape collection:
+     * redeemed with LOVEMOJANG, or built in for its UUID.
+     */
+    public boolean officialCapesUnlocked() {
+        return rewards.has(localUuid(), Entitlements.OFFICIAL_CAPES);
     }
 
     /** Cape sharing between Night players. */
@@ -201,8 +218,10 @@ public final class CapeManager {
         for (CapeCatalog.Entry e : catalog.entries()) {
             if (e.allows(me)) out.add(new Option(e.id, e.name, e.category, e.animated(), e));
         }
-        for (MojangCapes.Entry m : mojang.entries()) {
-            out.add(new Option(m.selectionId(), m.name, MojangCapes.CATEGORY, false, null, m));
+        if (officialCapesUnlocked()) {
+            for (MojangCapes.Entry m : mojang.entries()) {
+                out.add(new Option(m.selectionId(), m.name, MojangCapes.CATEGORY, false, null, m));
+            }
         }
         for (String f : customFiles) {
             out.add(new Option(CUSTOM_PREFIX + f, f, "custom", f.toLowerCase(Locale.ROOT).endsWith(".gif"), null));
@@ -344,9 +363,15 @@ public final class CapeManager {
         if (!c.capesEnabled || NONE.equals(c.cape)) return null;
         if (c.cape.startsWith(CUSTOM_PREFIX)) return c.cape;
         if (c.cape.startsWith(MojangCapes.PREFIX)) {
-            if (mojang.bySelection(c.cape) != null) return c.cape;
-            restrictionError = "unknown cape " + c.cape;
-            return null;
+            if (mojang.bySelection(c.cape) == null) {
+                restrictionError = "unknown cape " + c.cape;
+                return null;
+            }
+            if (!officialCapesUnlocked()) {
+                restrictionError = "official capes need the code LOVEMOJANG on this account";
+                return null;
+            }
+            return c.cape;
         }
         CapeCatalog.Entry e = catalog.get(c.cape);
         if (e == null) {
@@ -392,6 +417,7 @@ public final class CapeManager {
     public void onSessionChanged() {
         localUuidResolved = false;
         localUuid = null;
+        rewards.onSessionChanged();
         sync.onSessionChanged();
     }
 

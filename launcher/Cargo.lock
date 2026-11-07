@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-core"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1808,6 +1808,7 @@ dependencies = [
  "log",
  "md-5",
  "png",
+ "ring",
  "semver",
  "serde",
  "serde_json",
@@ -1822,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-launcher"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1841,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "kestrel-release"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "base64",
  "ed25519-dalek",

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use kestrel_core::auth::{self, AccountSummary, Authenticator, DeviceCode, Session, StoredAccount};
 use kestrel_core::config::LauncherConfig;
+use kestrel_core::entitlements;
 use kestrel_core::game_bridge::{Bridge, BridgeEvent};
 use kestrel_core::install::{self, InstallOptions, InstallState};
 use kestrel_core::instances::{GameSettings, RunLock};
@@ -221,6 +222,20 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
                 r?.0
             }
         };
+        // This account's rewards, for this game only: refresh from the service when it
+        // answers (else the verified cache), then give the game its own copy so it has them
+        // at start-up. Never fatal; the game also checks with the service itself.
+        if session.user_type == "msa" && entitlements::configured() {
+            progress.stage("Checking rewards", 0);
+            if let Err(e) = entitlements::refresh(layout.root(), &session.uuid) {
+                log::info!("instance {id}: rewards not refreshed ({e}); using the saved ones");
+            }
+            if let Err(e) =
+                entitlements::copy_to_game(layout.root(), &layout.client_data(), &session.uuid)
+            {
+                log::warn!("instance {id}: could not give the game its rewards: {e}");
+            }
+        }
 
         // 3. Java.
         let java = if game.use_managed_java {
@@ -289,6 +304,7 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
                 bctx.request_repaint();
             },
         )
+        .with_game_data(layout.root().to_path_buf(), layout.client_data())
     };
     let handle: GameHandle = Arc::new(Mutex::new(game_proc.child));
     let _ = tx.send(Msg::Launched {

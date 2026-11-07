@@ -12,6 +12,7 @@ mod icons;
 mod logger;
 mod presence;
 mod qol_page;
+mod redeem_page;
 mod selfcheck;
 mod skin_page;
 mod startup;

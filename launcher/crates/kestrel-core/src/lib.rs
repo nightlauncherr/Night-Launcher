@@ -11,6 +11,7 @@ pub mod cosmetics;
 pub mod datadir;
 pub mod discord;
 pub mod download;
+pub mod entitlements;
 pub mod error;
 pub mod forge;
 pub mod game_bridge;
