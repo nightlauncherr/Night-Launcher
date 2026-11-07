@@ -18,6 +18,7 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.client.GuiModList;
 import net.minecraft.client.renderer.texture.ITextureObject;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 
 import java.io.IOException;
@@ -32,6 +33,10 @@ import java.io.IOException;
  * character runs in from off-screen, slows down, stops and turns to face you
  * ({@link EntranceAnimation}); coming back from a screen opened here (worlds,
  * servers, options, skin) keeps it standing.
+ *
+ * <p>Above the wordmark a splash text gently pulses, like vanilla's splash. Once
+ * the character stands, it can be dragged with the left mouse button to turn it
+ * all the way round and tilt the view ({@link ModelOrbit}).
  *
  * <p>Every animation runs on wall-clock time, so it looks the same at any frame
  * rate. Navigation opens the normal Minecraft/Forge screens.
@@ -48,6 +53,12 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             "Singleplayer", "Multiplayer", "Realms", "Mods", "Minecraft Settings", "Night Settings", "Quit Game"};
     private static final int SINGLE = 0, MULTI = 1, REALMS = 2, MODS = 3, OPTIONS = 4, KESTREL = 5, QUIT = 6;
     private static final float LEAVE_SECONDS = 0.16f;
+    /** Splash text above the wordmark, its base scale, pulse (fraction of the size) and period (s). */
+    private static final String SPLASH = "CODE \"LOVEMOJANG\"";
+    private static final float SPLASH_SCALE = 1.3f;
+    private static final float SPLASH_PULSE = 0.05f;
+    private static final float SPLASH_PERIOD = 1.4f;
+    private static final int SPLASH_COLOR = 0xD9C4FF;
 
     private final KestrelClient client;
     private final SkinManager skins;
@@ -56,6 +67,9 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private final EntranceAnimation.Pose run = new EntranceAnimation.Pose();
     private final float[] hover = new float[LABELS.length];
     private final MenuDiagnostics diagnostics = new MenuDiagnostics("main menu");
+    private final ModelOrbit orbit = new ModelOrbit();
+    /** Where the character was last drawn, for hit-testing a drag; NaN until it has arrived. */
+    private float drawnCharX = Float.NaN;
 
     /**
      * Diagnostic slow motion ({@code -Dkestrel.animTimeScale=0.05}, shared with
@@ -78,6 +92,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private String footerLeft;
     private int footerLeftWidth;
     private int footerRightWidth;
+    private int splashWidth;
     private int leaving = -1;
     private long leaveNanos;
 
@@ -126,6 +141,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         footerLeft = "Night " + client.version();
         footerLeftWidth = fontRendererObj.getStringWidth(footerLeft);
         footerRightWidth = fontRendererObj.getStringWidth(FOOTER_RIGHT);
+        splashWidth = fontRendererObj.getStringWidth(SPLASH);
     }
 
     private static final String FOOTER_RIGHT = "Copyright Mojang AB. Do not distribute!";
@@ -203,6 +219,14 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         return mx >= accX && mx < accX + skinW && my >= skinY && my < skinY + skinH;
     }
 
+    /** On the standing character (its body and head; not the name tag or the buttons below). */
+    private boolean overModel(int mx, int my) {
+        if (Float.isNaN(drawnCharX)) return false;
+        float halfW = charScale * 0.5f;
+        return mx >= drawnCharX - halfW && mx <= drawnCharX + halfW
+                && my >= feetY - charScale * 2.1f && my <= feetY;
+    }
+
     private boolean ready() {
         return enteredNanos >= 0 && leaving < 0 && secs(enteredNanos, now()) > 0.35f;
     }
@@ -225,7 +249,19 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         } else if (overAccounts(mx, my)) {
             click();
             mc.displayGuiScreen(new com.kestrel.account.AccountScreen(client, this));
+        } else if (overModel(mx, my)) {
+            orbit.press(mx, my);
         }
+    }
+
+    @Override
+    protected void mouseClickMove(int mx, int my, int button, long timeSinceLastClick) {
+        if (button == 0) orbit.move(mx, my);
+    }
+
+    @Override
+    protected void mouseReleased(int mx, int my, int button) {
+        if (button == 0) orbit.release();
     }
 
     @Override
@@ -264,6 +300,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     @Override
     public void onGuiClosed() {
         leaving = -1;
+        orbit.release();
     }
 
     @Override
@@ -299,6 +336,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         MenuBackground.draw(width, height, time, ribbons, charX, feetY - charScale, charScale * 1.9f);
 
         drawMark(splash, time, e);
+        if (!splash) drawCodeSplash(time, e);
         if (splash) {
             drawSplashHint(time);
         } else {
@@ -378,6 +416,29 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         }
     }
 
+    /**
+     * The splash text, centred over the wordmark and kept above the mark, pulsing
+     * smoothly (a sine of wall-clock time) around its centre like vanilla's splash.
+     */
+    private void drawCodeSplash(float time, float e) {
+        float a = withSplash ? easeOut((e - 0.6f) / 0.5f) : easeOut((e - 0.2f) / 0.5f);
+        if (a < 0.03f) return;
+        float phase = (time % SPLASH_PERIOD) / SPLASH_PERIOD * (float) (Math.PI * 2.0);
+        float s = SPLASH_SCALE * (1f + SPLASH_PULSE * (float) Math.sin(phase));
+        float maxS = SPLASH_SCALE * (1f + SPLASH_PULSE);
+        float halfH = 4.5f * maxS;
+        float halfW = splashWidth * maxS / 2f;
+        float cx = markX + markSize + 10f + spacedWidth("NIGHT", 2); // centre of the 2x wordmark
+        cx = clamp(cx, 4f + halfW, width - 4f - halfW);
+        float cy = Math.max(markY - 4f - halfH, 3f + halfH);
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(cx, cy, 0f);
+        GlStateManager.scale(s, s, 1f);
+        GlStateManager.enableBlend();
+        fontRendererObj.drawString(SPLASH, -splashWidth / 2f, -4f, argb(SPLASH_COLOR, a), true);
+        GlStateManager.popMatrix();
+    }
+
     private void drawSplashHint(float time) {
         float a = clamp01((time - 0.5f) / 0.5f) * (0.55f + 0.45f * (float) Math.sin(time * 3.0f));
         if (a < 0.03f) return;
@@ -429,7 +490,12 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         pose.leftArmX = -pose.rightArmX;
         pose.rightArmZ = 0.10f * run.stride;
         pose.leftArmZ = -0.10f * run.stride;
-        pose.yaw = run.yaw;
+        // Mouse rotation (and its idle sway) once the character stands; a release outside
+        // the window, or losing focus, ends a drag as a normal release would.
+        if (orbit.dragging() && (!Mouse.isButtonDown(0) || !Display.isActive())) orbit.release();
+        orbit.update(dt);
+        pose.yaw = run.yaw + orbit.yaw() * run.idle;
+        pose.viewPitch = orbit.pitch() * run.idle;
         pose.lean = run.lean;
         pose.bob = run.bob;
         if (run.idle > 0f) {
@@ -444,12 +510,15 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         // while running or when the pointer leaves the window. Head only: the body pose is untouched.
         float targetYaw = 0f;
         float targetPitch = 0f;
-        if (run.idle > 0f && Mouse.isInsideWindow()) {
+        // Looking at the pointer fades out as the body is turned away or the view tilted.
+        float look = run.idle * Math.max(0f, (float) Math.cos(Math.toRadians(orbit.yaw())))
+                * (float) Math.cos(Math.toRadians(orbit.pitch()));
+        if (look > 0f && Mouse.isInsideWindow()) {
             // Centre of the head (eye level), in the same GUI units as the pointer.
             float headY = feetY - pose.bob * charScale - charScale * 1.75f;
             HeadLook.target(mx - x, my - headY, charScale * 2.5f, pose.yaw, headTarget);
-            targetYaw = headTarget[0] * run.idle;
-            targetPitch = headTarget[1] * run.idle;
+            targetYaw = headTarget[0] * look;
+            targetPitch = headTarget[1] * look;
         }
         headYaw = approach(headYaw, targetYaw, HeadLook.RATE, dt);
         headPitch = approach(headPitch, targetPitch, HeadLook.RATE, dt);
@@ -468,6 +537,7 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             slim = AccountSkin.slim();
         }
         renderer.draw(mc, x, feetY, charScale, tex, slim, pose, client.capes().menuPreviewTexture());
+        drawnCharX = run.idle >= 0.99f ? x : Float.NaN;
 
         // Name tag above the head, like in game.
         String name = mc.getSession().getUsername();

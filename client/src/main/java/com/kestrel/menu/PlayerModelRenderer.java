@@ -21,9 +21,14 @@ import org.lwjgl.opengl.GL11;
  * normal, lightmap unit, colour) so the GUI drawn afterwards is unaffected.
  */
 public final class PlayerModelRenderer {
-    /** Limb angles in radians; body yaw in degrees (0 = facing the viewer). */
+    /**
+     * Limb angles in radians; body yaw in degrees (0 = facing the viewer);
+     * {@code viewPitch} in degrees tilts the whole model about its middle
+     * (positive = top towards the viewer, as if seen from above).
+     */
     public static final class Pose {
         public float yaw;
+        public float viewPitch;
         public float lean;
         public float bob;
         public float headYaw;
@@ -32,7 +37,7 @@ public final class PlayerModelRenderer {
         public float rightLegX, leftLegX;
 
         public void reset() {
-            yaw = lean = bob = headYaw = headPitch = 0f;
+            yaw = viewPitch = lean = bob = headYaw = headPitch = 0f;
             rightArmX = leftArmX = rightArmZ = leftArmZ = 0f;
             rightLegX = leftLegX = 0f;
         }
@@ -73,6 +78,13 @@ public final class PlayerModelRenderer {
         RenderHelper.enableStandardItemLighting();
         GlStateManager.rotate(-135.0F, 0.0F, 1.0F, 0.0F);
         GlStateManager.rotate(180.0F, 0.0F, 0.0F, 1.0F);
+        // Viewing angle: tilt about the model's middle (one block up from the feet; up is -Y
+        // here), after the lighting is placed, so the light stays where it is relative to the viewer.
+        if (pose.viewPitch != 0.0F) {
+            GlStateManager.translate(0.0F, -1.0F, 0.0F);
+            GlStateManager.rotate(pose.viewPitch, 1.0F, 0.0F, 0.0F);
+            GlStateManager.translate(0.0F, 1.0F, 0.0F);
+        }
         // Face the viewer at yaw 0.
         GlStateManager.rotate(180.0F + pose.yaw, 0.0F, 1.0F, 0.0F);
         // Lean forward from the feet.
