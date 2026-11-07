@@ -138,7 +138,6 @@ public final class CapeManager {
     private volatile List<String> customFiles = Collections.emptyList();
     private String localUuid;
     private boolean localUuidResolved;
-    private String restrictionError;
 
     public CapeManager(KestrelClient client, File customDir) {
         this.client = client;
@@ -152,7 +151,7 @@ public final class CapeManager {
         this.sync = new CapeSync(client);
         this.rewards = new EntitlementStore(new File(customDir.getParentFile(), "entitlements"),
                 CapeSync.loadServiceUrl(), "Night-Client/" + client.version());
-        this.sync.setShareFilter(id -> !id.startsWith(MojangCapes.PREFIX) || officialCapesUnlocked());
+        this.sync.setShareFilter(this::visible);
     }
 
     /** Rewards of the accounts this game plays as. */
@@ -160,12 +159,25 @@ public final class CapeManager {
         return rewards;
     }
 
+    /** Whether the local account has a reward (null: nothing required). */
+    private boolean unlocked(String reward) {
+        return reward == null || rewards.has(localUuid(), reward);
+    }
+
     /**
-     * Whether the local account owns the official (Mojang) cape collection:
-     * redeemed with LOVEMOJANG, or built in for its UUID.
+     * Whether the local account may see, preview, equip and share a cape id.
+     * Content that needs a reward the account lacks, or that is reserved for
+     * another account, is treated everywhere as if it did not exist.
      */
-    public boolean officialCapesUnlocked() {
-        return rewards.has(localUuid(), Entitlements.OFFICIAL_CAPES);
+    public boolean visible(String id) {
+        if (id == null) return false;
+        if (NONE.equals(id) || id.startsWith(CUSTOM_PREFIX)) return true;
+        if (id.startsWith(MojangCapes.PREFIX)) {
+            MojangCapes.Entry m = mojang.bySelection(id);
+            return m != null && unlocked(m.requires);
+        }
+        CapeCatalog.Entry e = catalog.get(id);
+        return e != null && e.allows(localUuid()) && unlocked(e.requires);
     }
 
     /** Cape sharing between Night players. */
@@ -214,14 +226,11 @@ public final class CapeManager {
     public List<Option> options() {
         List<Option> out = new ArrayList<Option>();
         out.add(new Option(NONE, "None", "none", false, null));
-        String me = localUuid();
         for (CapeCatalog.Entry e : catalog.entries()) {
-            if (e.allows(me)) out.add(new Option(e.id, e.name, e.category, e.animated(), e));
+            if (visible(e.id)) out.add(new Option(e.id, e.name, e.category, e.animated(), e));
         }
-        if (officialCapesUnlocked()) {
-            for (MojangCapes.Entry m : mojang.entries()) {
-                out.add(new Option(m.selectionId(), m.name, MojangCapes.CATEGORY, false, null, m));
-            }
+        for (MojangCapes.Entry m : mojang.entries()) {
+            if (visible(m.selectionId())) out.add(new Option(m.selectionId(), m.name, MojangCapes.CATEGORY, false, null, m));
         }
         for (String f : customFiles) {
             out.add(new Option(CUSTOM_PREFIX + f, f, "custom", f.toLowerCase(Locale.ROOT).endsWith(".gif"), null));
@@ -235,8 +244,9 @@ public final class CapeManager {
 
     /** Why the selected cape is not shown, or null. */
     public String lastError() {
-        if (restrictionError != null) return restrictionError;
-        Loaded l = cache.get(client.config().cosmetics.cape);
+        String id = client.config().cosmetics.cape;
+        if (!visible(id)) return null;
+        Loaded l = cache.get(id);
         return l == null ? null : l.error;
     }
 
@@ -359,30 +369,13 @@ public final class CapeManager {
      */
     private String localCapeId() {
         ClientConfig.Cosmetics c = client.config().cosmetics;
-        restrictionError = null;
         if (!c.capesEnabled || NONE.equals(c.cape)) return null;
         if (c.cape.startsWith(CUSTOM_PREFIX)) return c.cape;
-        if (c.cape.startsWith(MojangCapes.PREFIX)) {
-            if (mojang.bySelection(c.cape) == null) {
-                restrictionError = "unknown cape " + c.cape;
-                return null;
-            }
-            if (!officialCapesUnlocked()) {
-                restrictionError = "official capes need the code LOVEMOJANG on this account";
-                return null;
-            }
-            return c.cape;
-        }
-        CapeCatalog.Entry e = catalog.get(c.cape);
-        if (e == null) {
-            restrictionError = "unknown cape " + c.cape;
-            return null;
-        }
-        if (!e.allows(localUuid())) {
-            restrictionError = e.name + " is reserved for another account";
-            return null;
-        }
-        return e.id;
+        // Enforced here, not only in menus. A selection this account can't
+        // see renders nothing and says nothing (no name, no reason), and stays
+        // saved so it comes back on the account it belongs to.
+        if (!visible(c.cape)) return null;
+        return c.cape;
     }
 
     /**
@@ -391,7 +384,7 @@ public final class CapeManager {
      * has not shown it for a while. Null until it is ready.
      */
     public ResourceLocation previewTexture(String id) {
-        if (id == null || mojang.bySelection(id) == null) return null;
+        if (id == null || mojang.bySelection(id) == null || !visible(id)) return null;
         return frame(id, true);
     }
 

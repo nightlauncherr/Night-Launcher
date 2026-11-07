@@ -1,5 +1,6 @@
 {
-  "_comment": "Historical Mojang capes as local Night cosmetics. Only names and Mojang texture ids are shipped; the original textures are downloaded from Mojang's texture server (https://textures.minecraft.net/texture/<textureId>) on first use and cached in instance/kestrel/mojang-capes. Equipping one does not grant or change any account cape. See documentation/CAPES.md.",
+  "_comment": "Official Minecraft capes as local Night cosmetics. Only names and Mojang texture ids are shipped; the original textures are downloaded from Mojang's texture server (https://textures.minecraft.net/texture/<textureId>) on first use and cached in instance/kestrel/mojang-capes. Equipping one does not grant or change any account cape. \"requires\" is the reward an account needs to see and use them (per entry it may differ); without it the collection is not shown at all. See documentation/CAPES.md.",
+  "requires": "official_capes",
   "capes": [
     {"id": "minecon_2011", "name": "MINECON 2011", "textureId": "953cac8b779fe41383e675ee2b86071a71658f2180f56fbce8aa315ea70e2ed6", "about": "MINECON 2011 attendees (red, creeper face)"},
     {"id": "minecon_2012", "name": "MINECON 2012", "textureId": "a2e8d97ec79100e90a75d369d1b3ba81273c4f82bc1b737e934eed4a854be1b6", "about": "MINECON 2012 attendees (blue, pickaxe)"},
@@ -12,6 +13,19 @@
     {"id": "mojang_classic", "name": "Mojang (Classic)", "textureId": "8f120319222a9f4a104e2f5cb97b2cda93199a2ee9e1585cb8d09d6f687cb761", "about": "Mojang staff cape, first design (2010-2015)"},
     {"id": "mojang", "name": "Mojang (2015)", "textureId": "5786fe99be377dfb6858859f926c4dbc995751e91cee373468c5fbf4865e7151", "about": "Mojang staff cape, second design (2015-2021)"},
     {"id": "cobalt", "name": "Cobalt", "textureId": "ca35c56efe71ed290385f4ab5346a1826b546a54d519e6a3ff01efa01acce81", "about": "Cobalt competition participants and winners (2016)"},
-    {"id": "mojira_moderator", "name": "Mojira Moderator", "textureId": "ae677f7d98ac70a533713518416df4452fe5700365c09cf45d0d156ea9396551", "about": "Moderators of Mojira, Mojang's bug tracker"}
+    {"id": "mojira_moderator", "name": "Mojira Moderator", "textureId": "ae677f7d98ac70a533713518416df4452fe5700365c09cf45d0d156ea9396551", "about": "Moderators of Mojira, Mojang's bug tracker"},
+    {"id": "migrator", "name": "Migrator", "textureId": "2340c0e03dd24a11b15a8b33c2a7e9e32abb2051b2481d0ba7defd635ca7a933", "about": "Given to Mojang accounts migrated to Microsoft accounts (2020-2022)"},
+    {"id": "vanilla", "name": "Vanilla", "textureId": "f9a76537647989f9a0b6d001e320dac591c359e9e61a31f4ce11c88f207f0ad4", "about": "Players who owned both Java and Bedrock Edition (2022)"},
+    {"id": "mojang_studios", "name": "Mojang Studios", "textureId": "9e507afc56359978a3eb3e32367042b853cddd0995d17d0da995662913fb00f7", "about": "Mojang staff (2021 to now)"},
+    {"id": "translator_chinese", "name": "Translator (Chinese)", "textureId": "2262fb1d24912209490586ecae98aca8500df3eff91f2a07da37ee524e7e3cb6", "about": "Chinese community translators"},
+    {"id": "millionth_customer", "name": "Millionth Customer", "textureId": "70efffaf86fe5bc089608d3cb297d3e276b9eb7a8f9f2fe6659c23a2d8b18edf", "about": "The player who made the millionth purchase of Minecraft (2011)"},
+    {"id": "prismarine", "name": "Prismarine", "textureId": "d8f8d13a1adf9636a16c31d47f3ecc9bb8d8533108aa5ad2a01b13b1a0c55eac", "about": "One-off personal cape"},
+    {"id": "turtle", "name": "Turtle", "textureId": "5048ea61566353397247d2b7d946034de926b997d5e66c86483dfb1e031aee95", "about": "One-off personal cape"},
+    {"id": "scrolls", "name": "Scrolls", "textureId": "3efadf6510961830f9fcc077f19b4daf286d502b5f5aafbd807c7bbffcaca245", "about": "Scrolls tournament champion (ScrollsChamp)"},
+    {"id": "snowman", "name": "Snowman", "textureId": "23ec737f18bfe4b547c95935fc297dd767bb84ee55bfd855144d279ac9bfd9fe", "about": "One-off personal cape (JulianClark)"},
+    {"id": "spade", "name": "Spade", "textureId": "2e002d5e1758e79ba51d08d92a0f3a95119f2f435ae7704916507b6c565a7da8", "about": "One-off personal cape (MrMessiah)"},
+    {"id": "db", "name": "dB", "textureId": "bcfbe84c6542a4a5c213c1cacf8979b5e913dcb4ad783a8b80e3c4a7d5c8bdac", "about": "One-off personal cape (dannyBstyle)"},
+    {"id": "cheapsh0t", "name": "cheapsh0t", "textureId": "ca29f5dd9e94fb1748203b92e36b66fda80750c87ebc18d6eafdb0e28cc1d05f", "about": "One-off personal cape"},
+    {"id": "valentine", "name": "Valentine", "textureId": "e578ef995fabcf0a94768f9651ac3aaba30c59ef85d2438e9b3e0cc1d810652b", "about": "One-off cape, briefly given to two players (2022-2023)"}
   ]
 }

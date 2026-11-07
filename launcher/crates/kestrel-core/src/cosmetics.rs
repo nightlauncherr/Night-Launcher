@@ -83,6 +83,10 @@ pub struct CapeEntry {
     /// Frame rate of an animated PNG strip (`None`: the player's setting).
     #[serde(default)]
     pub fps: Option<u32>,
+    /// Reward an account needs to see and wear this cape (exclusive content);
+    /// `None` = everyone. Without it the cape is not shown anywhere.
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 fn default_cape_category() -> String {
@@ -150,6 +154,11 @@ pub fn parse_catalog(json: &str) -> std::result::Result<Vec<CapeEntry>, String> 
             && let Some(bad) = owners.iter().find(|o| normalize_uuid(o).is_none())
         {
             return Err(format!("capes.json: {}: invalid owner UUID '{bad}'", c.id));
+        }
+        if let Some(r) = &c.requires
+            && !is_reward_id(r)
+        {
+            return Err(format!("capes.json: {}: invalid requires '{r}'", c.id));
         }
         if !CAPE_CATEGORIES.iter().any(|(id, _)| *id == c.category) {
             return Err(format!(
@@ -261,6 +270,10 @@ pub struct MojangCape {
     pub texture_id: String,
     #[serde(default)]
     pub about: String,
+    /// Reward needed to see and use it; filled from the list's `requires`
+    /// when the entry has none.
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 impl MojangCape {
@@ -279,7 +292,18 @@ impl MojangCape {
 
 #[derive(Deserialize)]
 struct MojangCapesFile {
+    /// Reward the whole list requires unless an entry says otherwise.
+    #[serde(default)]
+    requires: Option<String>,
     capes: Vec<MojangCape>,
+}
+
+/// A reward id (same rule as the cosmetics service).
+fn is_reward_id(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 48
+        && s.bytes()
+            .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_'))
 }
 
 fn is_texture_id(s: &str) -> bool {
@@ -288,8 +312,26 @@ fn is_texture_id(s: &str) -> bool {
 
 /// Parse and check the Mojang cape list (same rules as `MojangCapes.parse`).
 pub fn parse_mojang_capes(json: &str) -> std::result::Result<Vec<MojangCape>, String> {
-    let file: MojangCapesFile =
+    let mut file: MojangCapesFile =
         serde_json::from_str(json).map_err(|e| format!("mojang_capes.json: {e}"))?;
+    if let Some(r) = &file.requires
+        && !is_reward_id(r)
+    {
+        return Err(format!("mojang_capes.json: invalid requires '{r}'"));
+    }
+    for c in &mut file.capes {
+        if c.requires.is_none() {
+            c.requires = file.requires.clone();
+        }
+        if let Some(r) = &c.requires
+            && !is_reward_id(r)
+        {
+            return Err(format!(
+                "mojang_capes.json: {}: invalid requires '{r}'",
+                c.id
+            ));
+        }
+    }
     let mut ids = std::collections::HashSet::new();
     let mut textures = std::collections::HashSet::new();
     for c in &file.capes {
@@ -331,6 +373,23 @@ pub fn mojang_capes() -> &'static [MojangCape] {
 pub fn mojang_cape(selection: &str) -> Option<&'static MojangCape> {
     let id = selection.strip_prefix(MOJANG_PREFIX)?;
     mojang_capes().iter().find(|c| c.id == id)
+}
+
+/// Whether the account (`uuid`, with its `unlocks`) may see and use the cape
+/// selection `id`. Hidden capes are left out of every list, preview and
+/// search, and are not drawn even if a saved setting names them. No cape and
+/// uploaded capes are always allowed; unknown ids are not.
+pub fn cape_visible(id: &str, uuid: Option<&str>, unlocks: &crate::entitlements::Unlocks) -> bool {
+    if id == CAPE_NONE || id.starts_with(CUSTOM_PREFIX) {
+        return true;
+    }
+    if let Some(m) = mojang_cape(id) {
+        return unlocks.allows(m.requires.as_deref());
+    }
+    cape_catalog()
+        .iter()
+        .find(|c| c.id == id)
+        .is_some_and(|c| c.allows(uuid) && unlocks.allows(c.requires.as_deref()))
 }
 
 /// Where downloaded Mojang cape textures are cached (shared with the mod).
@@ -1526,6 +1585,56 @@ mod tests {
     }
 
     #[test]
+    fn exclusive_capes_are_invisible_without_their_reward() {
+        use crate::entitlements::{OFFICIAL_CAPES, Unlocks};
+        let none = Unlocks::default();
+        let official = Unlocks::from_rewards([OFFICIAL_CAPES]);
+        for c in mojang_capes() {
+            assert!(!cape_visible(
+                &c.selection_id(),
+                Some("0123456789abcdef0123456789abcdef"),
+                &none
+            ));
+            assert!(cape_visible(&c.selection_id(), None, &official));
+        }
+        // Ordinary capes, no cape and uploaded capes are always there.
+        assert!(cape_visible("ember", None, &none));
+        assert!(cape_visible(CAPE_NONE, None, &none));
+        assert!(cape_visible("custom:mine.png", None, &none));
+        // UUID-reserved capes stay with their owner, whatever else is unlocked.
+        assert!(!cape_visible(
+            "teto",
+            Some("0123456789abcdef0123456789abcdef"),
+            &official
+        ));
+        assert!(cape_visible(
+            "teto",
+            Some("ba14933ea7ad48168696a788cc1b3c1f"),
+            &none
+        ));
+        assert!(!cape_visible("mojang:nope", None, &official));
+        assert!(!cape_visible("nope", None, &official));
+        // A catalog cape can be exclusive too.
+        let cat = parse_catalog(
+            r#"{"capes":[{"id":"x","name":"X","texture":"a.png","requires":"ghost_cape"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(cat[0].requires.as_deref(), Some("ghost_cape"));
+        assert!(
+            parse_catalog(
+                r#"{"capes":[{"id":"x","name":"X","texture":"a.png","requires":"Bad Id"}]}"#
+            )
+            .is_err()
+        );
+        let m = parse_mojang_capes(
+            r#"{"requires":"official_capes","capes":[{"id":"a","name":"A","textureId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"id":"b","name":"B","textureId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","requires":"other"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(m[0].requires.as_deref(), Some("official_capes"));
+        assert_eq!(m[1].requires.as_deref(), Some("other"));
+    }
+
+    #[test]
     fn mojang_capes_list_matches_the_mod_and_request() {
         let ids: Vec<&str> = mojang_capes().iter().map(|c| c.id.as_str()).collect();
         assert_eq!(
@@ -1542,8 +1651,27 @@ mod tests {
                 "mojang_classic",
                 "mojang",
                 "cobalt",
-                "mojira_moderator"
+                "mojira_moderator",
+                "migrator",
+                "vanilla",
+                "mojang_studios",
+                "translator_chinese",
+                "millionth_customer",
+                "prismarine",
+                "turtle",
+                "scrolls",
+                "snowman",
+                "spade",
+                "db",
+                "cheapsh0t",
+                "valentine"
             ]
+        );
+        // The whole official collection needs the official_capes reward.
+        assert!(
+            mojang_capes()
+                .iter()
+                .all(|c| c.requires.as_deref() == Some(crate::entitlements::OFFICIAL_CAPES))
         );
         let java =
             include_str!("../../../../client/src/main/java/com/kestrel/cosmetics/MojangCapes.java");

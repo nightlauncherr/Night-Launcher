@@ -78,10 +78,20 @@ public class CapeCatalogTest {
     }
 
     @Test
+    public void capesThatNeedARewardAreNeverAssignedToOthers() throws Exception {
+        CapeCatalog c = CapeCatalog.parse("{\"capes\":[{\"id\":\"x\",\"name\":\"X\",\"texture\":\"capes/x.png\","
+                + "\"owners\":[\"" + TETO_OWNER + "\"],\"requires\":\"event_2027\"}]}");
+        assertEquals("event_2027", c.get("x").requires);
+        assertNull(c.assignedTo(UUID.fromString(TETO_OWNER)));
+        assertNull(bundled().get("teto").requires);
+    }
+
+    @Test
     public void rejectsMalformedEntries() {
         String[] bad = {
                 "[]",
                 "{}",
+                "{\"capes\":[{\"id\":\"x\",\"name\":\"X\",\"texture\":\"capes/x.png\",\"requires\":\"Not Valid\"}]}",
                 "{\"capes\":[{\"id\":\"x\",\"name\":\"X\",\"texture\":\"capes/x.png\",\"owners\":[\"bringing\"]}]}",
                 "{\"capes\":[{\"id\":\"x\",\"name\":\"X\",\"texture\":\"../../x.png\"}]}",
                 "{\"capes\":[{\"id\":\"x\",\"name\":\"X\",\"texture\":\"capes/x.bmp\"}]}",

@@ -104,10 +104,11 @@ pub struct CosmeticsPage {
     /// UUID of the signed-in Microsoft account (None offline / signed out),
     /// used only to decide which restricted catalog capes to offer.
     account_uuid: Option<String>,
-    /// Whether that account may use the official (Mojang) capes, and the
-    /// account + entitlement-cache generation it was worked out for.
-    official: bool,
-    official_for: Option<(Option<String>, u64)>,
+    /// The rewards that account has unlocked, and the account +
+    /// entitlement-cache generation they were worked out for. Content that
+    /// requires a reward the account lacks is not listed at all.
+    unlocks: entitlements::Unlocks,
+    unlocks_for: Option<(Option<String>, u64)>,
     textures: HashMap<String, egui::TextureHandle>,
     preview_errors: HashMap<String, String>,
     requested: std::collections::HashSet<String>,
@@ -136,8 +137,8 @@ impl CosmeticsPage {
             custom_capes: Vec::new(),
             custom_skies: Vec::new(),
             account_uuid: None,
-            official: false,
-            official_for: None,
+            unlocks: entitlements::Unlocks::default(),
+            unlocks_for: None,
             textures: HashMap::new(),
             preview_errors: HashMap::new(),
             requested: Default::default(),
@@ -160,20 +161,35 @@ impl CosmeticsPage {
     pub fn set_account(&mut self, uuid: Option<&str>) {
         self.account_uuid = uuid.map(str::to_string);
         let key = (self.account_uuid.clone(), entitlements::generation());
-        if self.official_for.as_ref() != Some(&key) {
-            let official = entitlements::official_capes(self.layout.root(), uuid);
-            if official != self.official {
-                // A "redeem to unlock" note no longer applies to this account.
+        if self.unlocks_for.as_ref() != Some(&key) {
+            let unlocks = entitlements::Unlocks::for_account(self.layout.root(), uuid);
+            let account_changed = self.unlocks_for.as_ref().map(|k| &k.0) != Some(&key.0);
+            if account_changed || unlocks != self.unlocks {
+                // A note about the previous account (or its content) must not
+                // carry over to one that may not see that content.
                 self.message = None;
             }
-            self.official = official;
-            self.official_for = Some(key);
+            self.unlocks = unlocks;
+            self.unlocks_for = Some(key);
         }
     }
 
-    /// Open the Capes tab on the official (Mojang) capes.
+    /// Whether a cape id may be listed, previewed or equipped for the
+    /// current account. Everything else is treated as if it did not exist.
+    fn cape_visible(&self, id: &str) -> bool {
+        cosmetics::cape_visible(id, self.account_uuid.as_deref(), &self.unlocks)
+    }
+
+    /// Open the Capes tab on the official (Mojang) capes, if this account
+    /// can see them; otherwise just the Capes tab.
     pub fn show_official_capes(&mut self) {
         self.tab = Tab::Capes;
+        let visible = cosmetics::mojang_capes()
+            .iter()
+            .any(|m| self.cape_visible(&m.selection_id()));
+        if !visible {
+            return;
+        }
         self.cape_filter.category = MOJANG_CATEGORY.0.into();
         self.cape_filter.search.clear();
     }
@@ -379,7 +395,7 @@ impl CosmeticsPage {
         }
         ui.label(
             RichText::new(
-                "Cosmetics are drawn by your Night client. Your built-in or Mojang cape is also shown to other \
+                "Cosmetics are drawn by your Night client. Your equipped built-in cape is also shown to other \
                  Night players (\"Share my cape\" in Night Settings in game); everything else stays on your PC, \
                  and nothing is sent to the servers you play on.",
             )
@@ -812,11 +828,10 @@ impl CosmeticsPage {
             custom: false,
             fps: None,
         }];
-        let me = self.account_uuid.as_deref();
         items.extend(
             cosmetics::cape_catalog()
                 .iter()
-                .filter(|c| c.allows(me))
+                .filter(|c| self.cape_visible(&c.id))
                 .map(|c| Item {
                     id: c.id.clone(),
                     name: c.name.clone(),
@@ -826,17 +841,21 @@ impl CosmeticsPage {
                     fps: c.animated().then(|| c.fps.unwrap_or(DEFAULT_CAPE_FPS)),
                 }),
         );
-        // Official capes are listed for everyone (with previews) but only
-        // equippable by accounts that own the collection.
-        let official = self.official;
-        items.extend(cosmetics::mojang_capes().iter().map(|m| Item {
-            id: m.selection_id(),
-            name: m.name.clone(),
-            category: MOJANG_CATEGORY.0.into(),
-            badge: (!official).then_some("LOCKED"),
-            custom: false,
-            fps: None,
-        }));
+        // Exclusive collections (the official capes) only exist for accounts
+        // that unlocked them: no entry, preview, chip or message otherwise.
+        items.extend(
+            cosmetics::mojang_capes()
+                .iter()
+                .filter(|m| self.cape_visible(&m.selection_id()))
+                .map(|m| Item {
+                    id: m.selection_id(),
+                    name: m.name.clone(),
+                    category: MOJANG_CATEGORY.0.into(),
+                    badge: None,
+                    custom: false,
+                    fps: None,
+                }),
+        );
         items.extend(self.custom_capes.iter().map(|f| Item {
             id: format!("{CUSTOM_PREFIX}{f}"),
             name: f.clone(),
@@ -845,34 +864,35 @@ impl CosmeticsPage {
             custom: true,
             fps: None,
         }));
-        let reserved = cosmetics::cape_catalog()
-            .iter()
-            .find(|c| c.id == self.settings.cosmetics.cape && !c.allows(me));
-        let equipped_official = cosmetics::mojang_cape(&self.settings.cosmetics.cape);
-        if let (Some(c), false) = (equipped_official, official) {
+        // A saved selection this account can't see (another account's
+        // reserved or unlocked cape) is shown as No cape, silently, and kept
+        // so it comes back on that account. Only a deleted custom file gets
+        // a note, since it is the player's own content.
+        let cape = self.settings.cosmetics.cape.clone();
+        if cape.starts_with(CUSTOM_PREFIX) && !items.iter().any(|i| i.id == cape) {
             ui.label(
                 RichText::new(format!(
-                    "The equipped cape ({}) is an official cape this account hasn't unlocked, so it won't render. \
-                     Redeem the code LOVEMOJANG on the Redeem page, or choose another cape. It comes back on an account \
-                     that has the collection.",
-                    c.name
+                    "The equipped cape ({}) is missing from the capes folder and will not render. Choose another.",
+                    cape.trim_start_matches(CUSTOM_PREFIX)
                 ))
                 .color(WARN),
             );
-        } else if let Some(c) = reserved {
-            ui.label(
-                RichText::new(format!(
-                    "The equipped cape ({}) is reserved for another account and will not render. \
-                     Sign in with the account it belongs to, or choose another.",
-                    c.name
-                ))
-                .color(WARN),
-            );
-        } else if !items.iter().any(|i| i.id == self.settings.cosmetics.cape) {
-            ui.label(RichText::new(format!(
-                "The equipped cape ({}) is missing from the capes folder and will not render. Choose another.",
-                self.settings.cosmetics.cape.trim_start_matches(CUSTOM_PREFIX)
-            )).color(WARN));
+        }
+        let shown_cape = if self.cape_visible(&cape) {
+            cape
+        } else {
+            CAPE_NONE.to_string()
+        };
+
+        // Only categories that have something in them for this account.
+        let cats: Vec<(&str, &str)> = with_custom(&[CAPE_CATEGORIES, &[MOJANG_CATEGORY]].concat())
+            .into_iter()
+            .filter(|(c, _)| items.iter().any(|i| i.category == *c))
+            .collect();
+        if !self.cape_filter.category.is_empty()
+            && !cats.iter().any(|(c, _)| *c == self.cape_filter.category)
+        {
+            self.cape_filter.category.clear();
         }
 
         let total = items.len();
@@ -881,14 +901,14 @@ impl CosmeticsPage {
             ui,
             "capes",
             &mut self.cape_filter,
-            &with_custom(&[CAPE_CATEGORIES, &[MOJANG_CATEGORY]].concat()),
+            &cats,
             items.len(),
             total,
         );
         if self.cape_filter.category == MOJANG_CATEGORY.0 {
             ui.label(
                 RichText::new(
-                    "Official Minecraft capes, as Night cosmetics: unlocked with the code LOVEMOJANG (Redeem page). \
+                    "Official Minecraft capes, as Night cosmetics on this account. \
                      Night players see the one you equip, other players don't, and it does not give your account that cape. \
                      The original textures are downloaded from Mojang's texture server the first time and kept on your PC.",
                 )
@@ -918,10 +938,9 @@ impl CosmeticsPage {
                 } in row
                 {
                     let equipped = if id == CAPE_NONE {
-                        self.settings.cosmetics.cape == CAPE_NONE
-                            || !self.settings.cosmetics.capes_enabled
+                        shown_cape == CAPE_NONE || !self.settings.cosmetics.capes_enabled
                     } else {
-                        self.settings.cosmetics.capes_enabled && self.settings.cosmetics.cape == *id
+                        self.settings.cosmetics.capes_enabled && shown_cape == *id
                     };
                     let tex = if id == CAPE_NONE {
                         None
@@ -966,15 +985,7 @@ impl CosmeticsPage {
                     if resp.clicked {
                         if id == CAPE_NONE {
                             self.settings.cosmetics.cape = CAPE_NONE.into();
-                        } else if id.starts_with(MOJANG_PREFIX) && !official {
-                            self.message = Some((
-                                false,
-                                format!(
-                                    "{name} is part of the official cape collection. Redeem the code LOVEMOJANG \
-                                     on the Redeem page to unlock it for this account."
-                                ),
-                            ));
-                        } else {
+                        } else if self.cape_visible(id) {
                             self.settings.cosmetics.cape = id.clone();
                             self.settings.cosmetics.capes_enabled = true;
                         }

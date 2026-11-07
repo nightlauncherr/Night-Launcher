@@ -31,13 +31,14 @@
 //     "catalog": {id: {type, name, description}}, "redemptions": [{"code", "description", "at",
 //     "rewards"}], "issued"}. Clients check the signature with the matching public key, so
 //     editing a cached copy, or using another account's, unlocks nothing.
-// Official (mojang:) capes are only shared for accounts entitled to "official_capes".
+// Exclusive capes (official mojang: capes, and catalog capes in CAPE_REQUIREMENTS) are
+// only stored and shared for accounts entitled to the reward they need.
 //
 // Storage: Workers KV namespace bound as CAPES: key = uuid (32 hex, no dashes) for the cape,
 // "ent:<uuid>" for an account's redemptions, "count:<CODE>" for codes with a global limit.
 
 import { PLAYER_CERTIFICATE_KEYS } from "./mojang-keys.js";
-import { BUILTIN_GRANTS, CODES, REWARDS, checkTables, expandRewards, normalizeCode } from "./rewards.js";
+import { BUILTIN_GRANTS, CAPE_REQUIREMENTS, CODES, REWARDS, checkTables, expandRewards, normalizeCode } from "./rewards.js";
 
 export const PROTOCOL = "night-cape-v1";
 export const REDEEM_PROTOCOL = "night-redeem-v1";
@@ -52,6 +53,13 @@ const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 // Built-in catalog ids and Mojang catalog ids; "none" removes the entry.
 // Uploaded (custom:) capes are local images and are never shared.
 const CAPE_RE = /^(none|[a-z0-9_]{1,48}|mojang:[a-z0-9_]{1,48})$/;
+
+/** The reward a cape id needs, or null when anyone may share it. */
+export function requiredReward(cape, requirements = CAPE_REQUIREMENTS) {
+  if (typeof cape !== "string") return null;
+  if (cape.startsWith("mojang:")) return OFFICIAL_CAPES;
+  return Object.prototype.hasOwnProperty.call(requirements, cape) ? requirements[cape] : null;
+}
 
 export function normalizeUuid(raw) {
   if (typeof raw !== "string") return null;
@@ -128,11 +136,11 @@ async function lookup(url, env) {
     const v = values[i];
     if (v && typeof v.cape === "string" && CAPE_RE.test(v.cape) && v.cape !== "none") capes[u] = v.cape;
   });
-  // Official capes stored before they needed the collection are only shown for entitled
-  // accounts (rare, so the extra reads stay small).
-  const official = Object.keys(capes).filter((u) => capes[u].startsWith("mojang:"));
-  const allowed = await Promise.all(official.map(async (u) => (await entitledRewards(env, u)).includes(OFFICIAL_CAPES)));
-  official.forEach((u, i) => {
+  // Exclusive capes stored before they needed a reward (or whose reward was since lost) are
+  // only shown for entitled accounts (rare, so the extra reads stay small).
+  const gated = Object.keys(capes).filter((u) => requiredReward(capes[u]) !== null);
+  const allowed = await Promise.all(gated.map(async (u) => (await entitledRewards(env, u)).includes(requiredReward(capes[u]))));
+  gated.forEach((u, i) => {
     if (!allowed[i]) delete capes[u];
   });
   return json(200, { capes }, { "cache-control": "public, max-age=60" });
@@ -194,8 +202,9 @@ async function publish(request, uuidPart, env, now, mojangKeys) {
   if (typeof cape !== "string" || !CAPE_RE.test(cape)) return error(400, "invalid cape");
   const denied = await proveOwner(uuid, body, (ts, nonce) => signedText(uuid, cape, ts, nonce), now, mojangKeys);
   if (denied) return denied;
-  if (cape.startsWith("mojang:") && !(await entitledRewards(env, uuid)).includes(OFFICIAL_CAPES)) {
-    return error(403, "official capes need the official cape collection (code LOVEMOJANG)");
+  const needs = requiredReward(cape);
+  if (needs !== null && !(await entitledRewards(env, uuid)).includes(needs)) {
+    return error(403, "this cape is not available for this account");
   }
 
   // Write only on change: KV writes are the scarce resource on the free plan.

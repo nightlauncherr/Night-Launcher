@@ -38,6 +38,12 @@ export const CODES = {
   },
 };
 
+// Exclusive built-in capes: catalog cape id -> the reward an account needs to share it.
+// Official (mojang:) capes always need "official_capes". Clients hide these capes
+// entirely from accounts without the reward; keep this in step with "requires" in
+// client/src/main/resources/assets/kestrel/capes.json.
+export const CAPE_REQUIREMENTS = {};
+
 // Accounts that have a reward without redeeming a code (32-hex UUID -> reward ids).
 // Clients carry the same list so these work without the service.
 export const BUILTIN_GRANTS = {
@@ -66,7 +72,7 @@ export function expandRewards(ids, rewards = REWARDS) {
 }
 
 /** Check the tables once at start-up (and in the tests) so a typo can't ship. */
-export function checkTables(codes = CODES, rewards = REWARDS, grants = BUILTIN_GRANTS) {
+export function checkTables(codes = CODES, rewards = REWARDS, grants = BUILTIN_GRANTS, capes = CAPE_REQUIREMENTS) {
   for (const [id, r] of Object.entries(rewards)) {
     if (!/^[a-z0-9_]{1,48}$/.test(id)) throw new Error(`reward ${id}: bad id`);
     if (typeof r.type !== "string" || typeof r.name !== "string") throw new Error(`reward ${id}: type and name are required`);
@@ -84,5 +90,8 @@ export function checkTables(codes = CODES, rewards = REWARDS, grants = BUILTIN_G
   }
   for (const [uuid, ids] of Object.entries(grants)) {
     if (!/^[0-9a-f]{32}$/.test(uuid) || ids.some((r) => !rewards[r])) throw new Error(`grant ${uuid}: bad entry`);
+  }
+  for (const [cape, r] of Object.entries(capes)) {
+    if (!/^[a-z0-9_]{1,48}$/.test(cape) || !rewards[r]) throw new Error(`cape ${cape}: requires an unknown reward`);
   }
 }

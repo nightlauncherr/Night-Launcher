@@ -20,14 +20,45 @@ public class MojangCapesTest {
     }
 
     @Test
-    public void bundledListHasTheTwelveRequestedCapes() throws Exception {
+    public void bundledListHasTheOfficialCapes() throws Exception {
         List<String> ids = new ArrayList<String>();
         for (MojangCapes.Entry e : bundled().entries()) ids.add(e.id);
         String[] expected = {"minecon_2011", "minecon_2012", "minecon_2013", "minecon_2015", "minecon_2016",
-                "realms_mapmaker", "crafter", "translator", "mojang_classic", "mojang", "cobalt", "mojira_moderator"};
+                "realms_mapmaker", "crafter", "translator", "mojang_classic", "mojang", "cobalt", "mojira_moderator",
+                "migrator", "vanilla", "mojang_studios", "translator_chinese", "millionth_customer", "prismarine",
+                "turtle", "scrolls", "snowman", "spade", "db", "cheapsh0t", "valentine"};
         assertEquals(java.util.Arrays.asList(expected), ids);
         MojangCapes.Entry m = bundled().bySelection("mojang:mojira_moderator");
         assertEquals("Mojira Moderator", m.name);
+    }
+
+    @Test
+    public void everyOfficialCapeNeedsTheCollection() throws Exception {
+        for (MojangCapes.Entry e : bundled().entries()) {
+            assertEquals(e.id, Entitlements.OFFICIAL_CAPES, e.requires);
+        }
+    }
+
+    @Test
+    public void requiresDefaultsFromTheListAndMayBeOverridden() {
+        MojangCapes m = MojangCapes.parse("{\"requires\":\"official_capes\",\"capes\":["
+                + "{\"id\":\"a\",\"name\":\"A\",\"textureId\":\"" + hex('a') + "\"},"
+                + "{\"id\":\"b\",\"name\":\"B\",\"textureId\":\"" + hex('b') + "\",\"requires\":\"event_2027\"}]}");
+        assertEquals("official_capes", m.bySelection("mojang:a").requires);
+        assertEquals("event_2027", m.bySelection("mojang:b").requires);
+        MojangCapes open = MojangCapes.parse("{\"capes\":[{\"id\":\"a\",\"name\":\"A\",\"textureId\":\"" + hex('a') + "\"}]}");
+        assertNull(open.bySelection("mojang:a").requires);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void invalidRequiresIsRejected() {
+        MojangCapes.parse("{\"requires\":\"Bad Reward\",\"capes\":[]}");
+    }
+
+    private static String hex(char c) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 64; i++) sb.append(c);
+        return sb.toString();
     }
 
     @Test

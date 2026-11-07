@@ -50,9 +50,11 @@ public final class CapeCatalog {
         public final String category;
         /** Frame rate of an animated PNG strip; 0 = use the player's animation setting. */
         public final int fps;
+        /** Reward an account needs to see and use this cape, or null for none. */
+        public final String requires;
 
         Entry(String id, String name, String texture, String fallback, CapeLayout.Spec layout, Set<String> owners,
-              String category, int fps) {
+              String category, int fps, String requires) {
             this.id = id;
             this.name = name;
             this.texture = texture;
@@ -62,6 +64,7 @@ public final class CapeCatalog {
             this.owners = owners == null ? null : Collections.unmodifiableSet(owners);
             this.category = category;
             this.fps = fps;
+            this.requires = requires;
         }
 
         /** Animated: a GIF, a strip with its own frame rate, or in the animated category. */
@@ -103,7 +106,9 @@ public final class CapeCatalog {
             ids.put(e.id, e);
             for (String o : e.owners()) {
                 UUID u = toUuid(o);
-                if (!owners.containsKey(u)) owners.put(u, e); // first listed cape wins
+                // Rewards of other players can't be checked here, so capes that
+                // need one are never drawn on others from the catalog alone.
+                if (e.requires == null && !owners.containsKey(u)) owners.put(u, e); // first listed cape wins
             }
         }
         this.byId = ids;
@@ -195,7 +200,12 @@ public final class CapeCatalog {
                 if (fps < 1 || fps > 60) throw new IllegalArgumentException(id + ": fps must be 1-60");
                 if (texture.endsWith(".gif")) throw new IllegalArgumentException(id + ": GIFs use their own timing; remove fps");
             }
-            out.add(new Entry(id, name, texture, fallback, spec, owners, category, fps));
+            String requires = null;
+            if (o.has("requires")) {
+                requires = reqString(o, "requires");
+                if (!MojangCapes.isRewardId(requires)) throw new IllegalArgumentException(id + ": invalid requires " + requires);
+            }
+            out.add(new Entry(id, name, texture, fallback, spec, owners, category, fps, requires));
         }
         return new CapeCatalog(out);
     }

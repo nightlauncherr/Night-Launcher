@@ -36,12 +36,15 @@ public final class MojangCapes {
         public final String textureId;
         /** One line on who received it. */
         public final String about;
+        /** Reward an account needs to see and use this cape, or null for none. */
+        public final String requires;
 
-        Entry(String id, String name, String textureId, String about) {
+        Entry(String id, String name, String textureId, String about, String requires) {
             this.id = id;
             this.name = name;
             this.textureId = textureId;
             this.about = about;
+            this.requires = requires;
         }
 
         /** The selection id stored in the config. */
@@ -101,6 +104,7 @@ public final class MojangCapes {
         List<Entry> out = new ArrayList<Entry>();
         Set<String> ids = new HashSet<String>();
         Set<String> textures = new HashSet<String>();
+        String defaultRequires = root.getAsJsonObject().has("requires") ? rewardId(root.getAsJsonObject(), "list") : null;
         for (JsonElement el : capes.getAsJsonArray()) {
             if (!el.isJsonObject()) throw new IllegalArgumentException("cape entry must be an object");
             JsonObject o = el.getAsJsonObject();
@@ -110,9 +114,21 @@ public final class MojangCapes {
             String textureId = str(o, "textureId");
             if (!isTextureId(textureId)) throw new IllegalArgumentException(id + ": textureId must be 32-64 lower-case hex digits");
             if (!textures.add(textureId)) throw new IllegalArgumentException(id + ": duplicate textureId");
-            out.add(new Entry(id, str(o, "name"), textureId, o.has("about") ? str(o, "about") : ""));
+            String requires = o.has("requires") ? rewardId(o, id) : defaultRequires;
+            out.add(new Entry(id, str(o, "name"), textureId, o.has("about") ? str(o, "about") : "", requires));
         }
         return new MojangCapes(out);
+    }
+
+    /** Reward ids: lower-case letters, digits and _, at most 48 (as the launcher and Worker). */
+    public static boolean isRewardId(String s) {
+        return s != null && s.matches("[a-z0-9_]{1,48}");
+    }
+
+    static String rewardId(JsonObject o, String what) {
+        String r = str(o, "requires");
+        if (!isRewardId(r)) throw new IllegalArgumentException(what + ": invalid requires " + r);
+        return r;
     }
 
     private static String str(JsonObject o, String k) {

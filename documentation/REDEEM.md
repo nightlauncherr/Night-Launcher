@@ -4,9 +4,9 @@ Codes unlock Night cosmetics for **one Minecraft account**. Enter them on the la
 **Redeem** page while that account is the active one; the page also lists what the account
 owns and the codes it has redeemed (code, date, rewards).
 
-| Code | Reward |
-|---|---|
-| `LOVEMOJANG` | The official Minecraft cape collection (every cape in the Mojang category) |
+Codes are not listed anywhere in Night; the launcher only shows what an account already owns.
+The codes and their rewards are in `services/cosmetics/src/rewards.js`. Rewards include
+`official_capes`, the official Minecraft cape collection (every cape in the Mojang category).
 
 - Each account redeems a code once. Any number of accounts can redeem the same code (unless a
   code has a total limit). Rewards never move between accounts.
@@ -14,8 +14,9 @@ owns and the codes it has redeemed (code, date, rewards).
   service keeps them. Offline accounts can't redeem: there is no Microsoft account to bind the
   code to.
 - Switching accounts (in the launcher or in game) shows and uses only that account's rewards.
-  An equipped reward the new account doesn't own stays selected but isn't drawn, and comes
-  back when you switch to an account that owns it.
+  Content the new account doesn't own disappears entirely (no category, entry, preview or
+  message); an equipped one shows as *No cape*, isn't drawn, and comes back when you switch to
+  an account that owns it.
 
 ## How it works
 
@@ -36,9 +37,10 @@ The service is the Night cosmetics Worker (`services/cosmetics`).
    gives each game a copy before it starts and before an in-game account switch completes; the
    game also checks with the service itself. Editing a cached file, or copying another
    account's, unlocks nothing.
-3. **Where it's enforced**: the launcher's Cosmetics page (locked capes can be previewed, not
-   equipped), the in-game cape list, drawing your own cape, and cape sharing (the service
-   refuses to publish, and hides, official capes of accounts without the collection).
+3. **Where it's enforced**: the launcher's Cosmetics page and the in-game cape list (content
+   that needs a reward the account lacks is not listed, previewed or searchable at all), drawing
+   your own cape (refused, silently, by the game itself), and cape sharing (the service refuses
+   to publish, and hides, exclusive capes of accounts without the reward).
 
 Limits: your own game is a program on your PC, so a modified client can draw anything on your
 own screen; what the service guarantees is what other Night players see. A code's total limit
@@ -50,8 +52,6 @@ Edit `services/cosmetics/src/rewards.js` and run `npx wrangler deploy` there:
 
 ```js
 export const CODES = {
-  LOVEMOJANG: { rewards: ["official_capes"], description: "…", enabled: true,
-                expires: null, globalLimit: null, perAccountLimit: 1 },
   SPOOKY2027: { rewards: ["ghost_cape"], description: "Halloween cape", enabled: true,
                 expires: "2027-11-01T00:00:00Z", globalLimit: 500, perAccountLimit: 1 },
 };

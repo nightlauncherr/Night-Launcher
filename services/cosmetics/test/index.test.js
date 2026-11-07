@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handle, normalizeUuid, signedText, redeemText, certificatePayload, b64decode } from "../src/lib.js";
-import { CODES, REWARDS, BUILTIN_GRANTS, checkTables, expandRewards, normalizeCode } from "../src/rewards.js";
+import { handle, normalizeUuid, signedText, redeemText, certificatePayload, b64decode, requiredReward } from "../src/lib.js";
+import { CODES, REWARDS, BUILTIN_GRANTS, CAPE_REQUIREMENTS, checkTables, expandRewards, normalizeCode } from "../src/rewards.js";
 import { PLAYER_CERTIFICATE_KEYS } from "../src/mojang-keys.js";
 
 const UUID = "0123456789abcdef0123456789abcdef";
@@ -355,6 +355,21 @@ test("without the signing key nothing is redeemed or issued", async () => {
   assert.equal((await entitlementsOf(env, UUID)).status, 503);
   assert.equal(env.CAPES.writes(), 0);
   assert.equal((await entitlementsOf(keyedEnv(), "nope")).status, 400);
+});
+
+test("exclusive capes name their reward; the refusal never mentions a code", async () => {
+  assert.equal(requiredReward("mojang:migrator"), "official_capes");
+  assert.equal(requiredReward("ember"), null);
+  assert.equal(requiredReward("none"), null);
+  assert.equal(requiredReward("event_cape", { event_cape: "official_capes" }), "official_capes");
+  assert.equal(requiredReward("constructor"), null);
+  checkTables(CODES, REWARDS, BUILTIN_GRANTS, CAPE_REQUIREMENTS);
+  assert.throws(() => checkTables(CODES, REWARDS, BUILTIN_GRANTS, { ember: "nope" }));
+  const env = keyedEnv();
+  const res = await put(env, UUID, await body(UUID, "mojang:valentine", { nonce: "9".repeat(32), key: undefined }));
+  assert.equal(res.status, 403);
+  const text = JSON.stringify(await res.json());
+  for (const code of Object.keys(CODES)) assert.ok(!text.toUpperCase().includes(code), text);
 });
 
 test("official capes are only shared for entitled accounts; Night capes for everyone", async () => {

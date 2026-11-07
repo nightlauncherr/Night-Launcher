@@ -24,7 +24,7 @@ lookups and 1,000 cape changes per day. The Worker writes only when a cape actua
 
 ## Redeem codes
 
-`POST /v1/redeem` and `GET /v1/entitlements/<uuid>` handle cosmetic codes such as `LOVEMOJANG`
+`POST /v1/redeem` and `GET /v1/entitlements/<uuid>` handle cosmetic redeem codes
 (codes and rewards: `src/rewards.js`; details: `documentation/REDEEM.md`). Redemptions are signed
 with the same player certificate as cape publishing, stored under `ent:<uuid>`, and each
 account's rewards are answered as a document signed with the Worker secret

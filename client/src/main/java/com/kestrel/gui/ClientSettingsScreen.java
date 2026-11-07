@@ -6,6 +6,7 @@ import com.kestrel.animation.SwingStyle;
 import com.kestrel.config.ClientConfig;
 import com.kestrel.config.Preset;
 import com.kestrel.cosmetics.CapeManager;
+import com.kestrel.cosmetics.MojangCapes;
 import com.kestrel.effects.KillEffectType;
 import com.kestrel.gui.widgets.ActionButton;
 import com.kestrel.gui.widgets.Choice;
@@ -265,18 +266,33 @@ public final class ClientSettingsScreen extends GuiScreen {
                     capeOpts.put(o.id, o);
                     capeItems.add(new TileGrid.Item(o.id, o.name, o.category, o.animated ? "ANIM" : null));
                 }
-                content.add(new TileGrid(capeItems, list2("static", "Static", "animated", "Animated", "special", "Special",
-                        "kestrel", "Night", "mojang", "Mojang", "custom", "Custom"), () -> co.cape, v -> {
+                // Chips only for categories this account has something in, so
+                // exclusive collections leave no trace when not unlocked.
+                List<String[]> capeCats = new ArrayList<String[]>();
+                for (String[] cat : list2("static", "Static", "animated", "Animated", "special", "Special",
+                        "kestrel", "Night", MojangCapes.CATEGORY, "Mojang", "custom", "Custom")) {
+                    for (TileGrid.Item it : capeItems) {
+                        if (cat[0].equals(it.category)) {
+                            capeCats.add(cat);
+                            break;
+                        }
+                    }
+                }
+                boolean filterShown = CAPE_FILTER.category.isEmpty();
+                for (String[] cat : capeCats) filterShown |= cat[0].equals(CAPE_FILTER.category);
+                if (!filterShown) CAPE_FILTER.category = "";
+                final CapeManager capes = client.capes();
+                content.add(new TileGrid(capeItems, capeCats,
+                        () -> capes.visible(co.cape) ? co.cape : CapeManager.NONE, v -> {
                     co.cape = v;
                     if (!CapeManager.NONE.equals(v)) co.capesEnabled = true;
                     changed();
                 }, (mc2, it, x, y, w, h) -> drawCapeThumb(mc2, capeOpts.get(it.id), x, y, w, h), CAPE_FILTER, 40, 64));
-                text(client.capes().officialCapesUnlocked()
-                        ? "Mojang: the official Minecraft capes (MINECON 2011-2016, Mojang staff, Mojira, Realms, ...), shown by Night "
-                                + "(other Night players see the one you equip). They do not grant or change any account cape. The original "
-                                + "textures are downloaded from Mojang's texture server the first time and kept on your PC."
-                        : "Mojang: the official Minecraft capes are locked on this account. Redeem the code LOVEMOJANG in "
-                                + "Night Launcher (Redeem page) to unlock the whole collection.");
+                if (capeCatOf(capeCats, MojangCapes.CATEGORY) != null) {
+                    text("Mojang: the official Minecraft capes, shown by Night (other Night players see the one you equip). "
+                            + "They do not grant or change any account cape. The original textures are downloaded from "
+                            + "Mojang's texture server the first time and kept on your PC.");
+                }
                 content.add(new Toggle("Animate capes", () -> co.animatedCapes, v -> {
                     co.animatedCapes = v;
                     changed();
@@ -291,7 +307,7 @@ public final class ClientSettingsScreen extends GuiScreen {
                     changed();
                 }));
                 text(client.capes().sync().enabled()
-                        ? "Sharing: other Night players see your built-in or Mojang cape (uploaded capes stay on your PC). "
+                        ? "Sharing: other Night players see your equipped built-in cape (uploaded capes stay on your PC). "
                                 + "Your account is verified with the player certificate Mojang issues to it; "
                                 + "your login token and keys are never sent to Night."
                         : "Cape sharing is not set up in this build: capes are shown on your PC only.");
@@ -788,6 +804,11 @@ public final class ClientSettingsScreen extends GuiScreen {
     }
 
     /** Pairs (id, label, id, label, ...) as category rows for a {@link TileGrid}. */
+    private static String[] capeCatOf(List<String[]> cats, String id) {
+        for (String[] c : cats) if (c[0].equals(id)) return c;
+        return null;
+    }
+
     private static List<String[]> list2(String... s) {
         List<String[]> l = new ArrayList<String[]>(s.length / 2);
         for (int i = 0; i + 1 < s.length; i += 2) l.add(new String[] {s[i], s[i + 1]});
@@ -825,11 +846,12 @@ public final class ClientSettingsScreen extends GuiScreen {
         ResourceLocation tex = client.capes().currentTexture();
         if (tex == null) {
             String s = cfg().cosmetics.capesEnabled ? "No cape selected" : "Capes hidden";
-            if (CapeManager.NONE.equals(cfg().cosmetics.cape) || !cfg().cosmetics.capesEnabled) {
+            String sel = cfg().cosmetics.cape;
+            if (CapeManager.NONE.equals(sel) || !cfg().cosmetics.capesEnabled || !client.capes().visible(sel)) {
+                // A selection this account can't see shows as no cape, without naming it.
                 mc.fontRendererObj.drawString(s, cx - mc.fontRendererObj.getStringWidth(s) / 2, cy - 4, Theme.MUTED);
             } else {
-                // A refused cape (locked official cape, another account's cape) says why;
-                // otherwise its texture is still loading.
+                // A cape that failed to load says why; otherwise it is still loading.
                 String why = client.capes().lastError();
                 String l = why == null ? "Loading..." : mc.fontRendererObj.trimStringToWidth("Not shown: " + why, contentW - 20);
                 mc.fontRendererObj.drawString(l, cx - mc.fontRendererObj.getStringWidth(l) / 2, cy - 4, Theme.MUTED);

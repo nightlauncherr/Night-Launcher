@@ -117,6 +117,42 @@ pub fn builtin(uuid: Option<&str>) -> &'static [&'static str] {
         .unwrap_or(&[])
 }
 
+/// Everything an account has unlocked (built in and redeemed), for deciding
+/// what exclusive content it may see and use. An account without a reward
+/// gets no trace of the content that needs it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Unlocks {
+    rewards: std::collections::BTreeSet<String>,
+}
+
+impl Unlocks {
+    /// An account's unlocks: built-in grants plus its verified cached document.
+    /// `None` (offline or signed out) has none.
+    pub fn for_account(root: &Path, uuid: Option<&str>) -> Unlocks {
+        let mut rewards: std::collections::BTreeSet<String> =
+            builtin(uuid).iter().map(|r| (*r).to_string()).collect();
+        if let Some(e) = uuid.and_then(|u| cached(root, u)) {
+            rewards.extend(e.rewards);
+        }
+        Unlocks { rewards }
+    }
+
+    pub fn from_rewards<I: IntoIterator<Item = S>, S: Into<String>>(rewards: I) -> Unlocks {
+        Unlocks {
+            rewards: rewards.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    pub fn has(&self, reward: &str) -> bool {
+        self.rewards.contains(reward)
+    }
+
+    /// Whether content that requires `requires` (`None`: nothing) is available.
+    pub fn allows(&self, requires: Option<&str>) -> bool {
+        requires.is_none_or(|r| self.has(r))
+    }
+}
+
 // ---- signature check --------------------------------------------------------------------
 
 /// The service's public key (SubjectPublicKeyInfo DER), or None while none is bundled.
@@ -288,11 +324,6 @@ pub fn has_reward(root: &Path, uuid: Option<&str>, reward: &str) -> bool {
     }
     uuid.and_then(|u| cached(root, u))
         .is_some_and(|e| e.has(reward))
-}
-
-/// Whether an account may use the official Minecraft capes.
-pub fn official_capes(root: &Path, uuid: Option<&str>) -> bool {
-    has_reward(root, uuid, OFFICIAL_CAPES)
 }
 
 // ---- service -----------------------------------------------------------------------------
@@ -727,17 +758,22 @@ mod tests {
         assert!(builtin(None).is_empty());
         assert!(builtin(Some("bringing")).is_empty());
         let dir = tempfile::tempdir().unwrap();
-        assert!(official_capes(
-            dir.path(),
-            Some("ba14933ea7ad48168696a788cc1b3c1f")
-        ));
-        assert!(!official_capes(dir.path(), Some(UUID)));
-        assert!(!official_capes(dir.path(), None));
+        let has = |u: Option<&str>| Unlocks::for_account(dir.path(), u).has(OFFICIAL_CAPES);
+        assert!(has(Some("ba14933ea7ad48168696a788cc1b3c1f")));
+        assert!(!has(Some(UUID)));
+        assert!(!has(None));
         // Offline sessions get an OfflinePlayer UUID, never the owner's.
-        assert!(!official_capes(
-            dir.path(),
-            Some(&Session::offline("bringing").uuid)
-        ));
+        assert!(!has(Some(&Session::offline("bringing").uuid)));
+    }
+
+    #[test]
+    fn unlocks_gate_required_content() {
+        let none = Unlocks::default();
+        let some = Unlocks::from_rewards([OFFICIAL_CAPES]);
+        assert!(none.allows(None) && some.allows(None));
+        assert!(!none.allows(Some(OFFICIAL_CAPES)));
+        assert!(some.allows(Some(OFFICIAL_CAPES)));
+        assert!(!some.allows(Some("ghost_cape")));
     }
 
     #[test]

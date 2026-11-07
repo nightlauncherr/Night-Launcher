@@ -49,15 +49,26 @@ keep working.
 
 ## Historical Mojang capes
 
-The **Mojang** category lists 12 historical Mojang capes as *local Night cosmetics*: MINECON
-2011, 2012, 2013, 2015 and 2016, Realms MapMaker, Crafter, Translator, Mojang (Classic) and
-Mojang (2015) (the first and second Mojang staff designs), Cobalt and Mojira Moderator.
+The **Mojang** category lists 25 official Minecraft capes as *local Night cosmetics*: MINECON
+2011, 2012, 2013, 2015 and 2016, Realms MapMaker, Crafter, Translator, Translator (Chinese),
+Mojang (Classic), Mojang (2015) and Mojang Studios (the Mojang staff designs), Cobalt, Mojira
+Moderator, Migrator, Vanilla, Millionth Customer, Prismarine, Turtle, Scrolls, Snowman, Spade,
+dB, cheapsh0t and Valentine.
 
-They are the **official cape collection**, unlocked per Minecraft account by redeeming the code
-`LOVEMOJANG` on the launcher's **Redeem** page (see [REDEEM.md](REDEEM.md)); a few accounts have
-it built in. Without it they are listed as locked in the launcher, hidden in the in-game menu,
-not drawn on your player, and not shared: the cosmetics service refuses to publish an official
-cape for an account without the collection, and drops ones stored before it was required.
+They are the **official cape collection**, a Night cosmetic reward (`official_capes`) unlocked
+per Minecraft account with a redeem code on the launcher's **Redeem** page (see
+[REDEEM.md](REDEEM.md)); a few accounts have it built in. For an account without it the
+collection does not exist anywhere in Night: no Mojang category, entries, previews, search
+results or messages in the launcher or the in-game menu, and nothing drawn or shared. The
+cosmetics service refuses to publish an official cape for an account without the collection,
+and drops ones stored before it was required.
+
+Exclusive content in general works the same way: an entry in `mojang_capes.json` or
+`capes.json` can name the reward it needs with `"requires": "<reward id>"` (in
+`mojang_capes.json` a top-level `requires` applies to every entry). Accounts without that
+reward never see it, a saved selection of it shows as *No cape* (and comes back on the account
+that owns it), and the client refuses to draw it. Catalog capes that need a reward are also
+listed in `CAPE_REQUIREMENTS` in `services/cosmetics/src/rewards.js` so the service gates them.
 
 - Your Night client draws the one you equip, and other Night players see it through cape
   sharing (below). It does not grant or change any account cape, and vanilla players don't
