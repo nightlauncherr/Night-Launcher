@@ -9,7 +9,7 @@ another drive) and be started from a shortcut. Your normal `.minecraft` is never
 | | Folder |
 |---|---|
 | Default | `%LOCALAPPDATA%\Night Launcher` (e.g. `C:\Users\<you>\AppData\Local\Night Launcher`) |
-| Night Launcher 1.1.0 and earlier, Kestrel 0.2 – 0.11 | `%LOCALAPPDATA%\Kestrel` (moved automatically, see below) |
+| Night Launcher 1.1.0 and earlier, Kestrel 0.1 – 0.11 | `%LOCALAPPDATA%\Kestrel` (moved automatically, see below) |
 | Chosen for one start | `NightLauncher.exe --root "<folder>"` |
 | Chosen permanently | environment variable `NIGHT_LAUNCHER_HOME` (the older `KESTREL_HOME` still works) |
 

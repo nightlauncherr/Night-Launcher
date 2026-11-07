@@ -1,7 +1,7 @@
 //! Where Night Launcher keeps its data, and the one-time move from the folder
 //! earlier versions used.
 //!
-//! Every version from Kestrel 0.2 to Night Launcher 1.1 kept everything in
+//! Every version from Kestrel 0.1 to Night Launcher 1.1 kept everything in
 //! `%LOCALAPPDATA%\Kestrel` with the same layout (later versions only added
 //! folders: `mods-disabled`/`mods-trash` in 0.2.1, `instances` in 1.1).
 //! From 1.1.1 the folder is `%LOCALAPPDATA%\Night Launcher`:
@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn oldest_layouts_migrate_too() {
-        // Kestrel 0.2.0: no mods-disabled, no instances, single-account file.
+        // Kestrel 0.1/0.2: no mods-disabled, no instances, single-account file.
         let d = tempfile::tempdir().unwrap();
         let old = d.path().join(LEGACY_DIR);
         write(&old.join("launcher.json"), r#"{"max_ram_mib":2048}"#);
