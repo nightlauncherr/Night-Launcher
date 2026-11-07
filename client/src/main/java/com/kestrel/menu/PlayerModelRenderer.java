@@ -82,7 +82,7 @@ public final class PlayerModelRenderer {
         // here), after the lighting is placed, so the light stays where it is relative to the viewer.
         if (pose.viewPitch != 0.0F) {
             GlStateManager.translate(0.0F, -1.0F, 0.0F);
-            GlStateManager.rotate(pose.viewPitch, 1.0F, 0.0F, 0.0F);
+            GlStateManager.rotate(-pose.viewPitch, 1.0F, 0.0F, 0.0F); // positive: seen from above
             GlStateManager.translate(0.0F, 1.0F, 0.0F);
         }
         // Face the viewer at yaw 0.
