@@ -8,7 +8,7 @@ import net.minecraft.client.gui.GuiSelectWorld;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
-/** Adds CREATE SUMO WORLD to the top right of the Singleplayer world list. */
+/** Adds CREATE SUMO WORLD to the top left of the Singleplayer world list. */
 public final class SumoMenuButton {
     static final int BUTTON_ID = 0x5A40;
     static final String LABEL = "CREATE SUMO WORLD";
@@ -17,7 +17,7 @@ public final class SumoMenuButton {
     public void onInitGui(GuiScreenEvent.InitGuiEvent.Post event) {
         if (!(event.gui instanceof GuiSelectWorld)) return;
         int w = 132;
-        event.buttonList.add(new NightButton(BUTTON_ID, event.gui.width - w - 6, 6, w, 20, LABEL));
+        event.buttonList.add(new NightButton(BUTTON_ID, 6, 6, w, 20, LABEL));
     }
 
     @SubscribeEvent
