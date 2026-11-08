@@ -110,6 +110,7 @@ final class SumoMenuScreen extends GuiScreen {
             mc.displayGuiScreen(null);
             return;
         }
+        SumoView.takeRequest(); // already open: a request made meanwhile must not reopen it after closing
         refresh();
     }
 

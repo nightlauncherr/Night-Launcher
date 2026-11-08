@@ -80,8 +80,8 @@ final class SumoCommand extends CommandBase {
                                 + "The current blocks are backed up first. Type /sumo reset default confirm");
                         return;
                     }
-                    ArenaLayout l = s.layout();
-                    s.rebuildDefault(l.platformSize, l.platformMaterial, "before-default");
+                    ArenaLayout d = ArenaLayout.defaults();
+                    s.rebuildDefault(d.platformSize, d.platformMaterial, "before-default");
                 } else {
                     if (!confirmed) {
                         say(sender, EnumChatFormatting.YELLOW + "[Sumo] This puts back your last saved arena (/sumo save), "
