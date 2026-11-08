@@ -26,11 +26,12 @@ public final class Sumo {
         });
     }
 
-    /** Init: the opponent entity, server-side session hooks and the Singleplayer button. */
+    /** Init: the opponent entity, server-side session hooks, the Singleplayer button and the client side (menu, M key, lobby text). */
     public static void init(Object mod) {
         EntityRegistry.registerModEntity(EntitySumoBot.class, "NightSumoBot", 0, mod, 80, 1, true);
         MinecraftForge.EVENT_BUS.register(SumoServer.get());
         MinecraftForge.EVENT_BUS.register(new SumoMenuButton());
+        MinecraftForge.EVENT_BUS.register(new SumoClient());
     }
 
     public static void serverStarting(FMLServerStartingEvent event) {

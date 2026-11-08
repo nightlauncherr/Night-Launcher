@@ -65,6 +65,11 @@ public final class SumoStats {
      * @param hitsByBot    hits the opponent landed on the player this match
      */
     public void record(Result result, long durationMs, int hitsByPlayer, int hitsByBot, long nowEpochMs) {
+        record(result, durationMs, hitsByPlayer, hitsByBot, nowEpochMs, true);
+    }
+
+    /** As above; {@code adapt} false (a fixed difficulty was chosen) leaves the adaptive difficulty alone. */
+    public void record(Result result, long durationMs, int hitsByPlayer, int hitsByBot, long nowEpochMs, boolean adapt) {
         durationMs = Math.max(0, durationMs);
         matches++;
         totalMatchMs += durationMs;
@@ -88,7 +93,7 @@ public final class SumoStats {
                 draws++;
                 break;
         }
-        difficulty = SumoDifficulty.afterMatch(difficulty, result, winStreak());
+        if (adapt) difficulty = SumoDifficulty.afterMatch(difficulty, result, winStreak());
         lastPlayedEpochMs = nowEpochMs;
     }
 

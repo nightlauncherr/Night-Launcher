@@ -47,9 +47,10 @@ public final class SumoServer {
         if (!SumoArena.WORLD_FOLDER.equals(server.getFolderName())) return;
         WorldServer overworld = server.worldServerForDimension(0);
         if (overworld == null) return;
-        session = new SumoSession(overworld, statsFile(), KestrelMod.LOG);
+        session = new SumoSession(overworld, dataDir, KestrelMod.LOG);
         session.start();
         event.registerServerCommand(new SumoCommand(this));
+        event.registerServerCommand(new StopSumoCommand(this));
     }
 
     /** FMLServerStoppingEvent: leaving the world, by any route. */

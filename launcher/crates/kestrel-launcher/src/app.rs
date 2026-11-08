@@ -619,6 +619,16 @@ impl LauncherApp {
     }
 
     fn play_instance(&mut self, id: &str, ctx: &egui::Context) {
+        self.launch_instance(id, false, ctx);
+    }
+
+    /// Start the default instance straight into the Sumo practice lobby.
+    fn play_sumo(&mut self, ctx: &egui::Context) {
+        let id = self.cfg.default_instance.clone();
+        self.launch_instance(&id, true, ctx);
+    }
+
+    fn launch_instance(&mut self, id: &str, open_sumo: bool, ctx: &egui::Context) {
         // A signed release marked this version as no longer supported.
         if let Some(v) = self.updater.required_version(&self.cfg) {
             self.notify(Status::Error(format!(
@@ -684,6 +694,7 @@ impl LauncherApp {
             cfg: self.cfg.clone(),
             game: inst.meta.game.clone(),
             account,
+            open_sumo,
         };
         let (tx, ctx2) = (self.tx.clone(), ctx.clone());
         if let Err(e) = std::thread::Builder::new()
@@ -1261,6 +1272,13 @@ impl LauncherApp {
         if theme::play_button(ui, Vec2::new(w, 68.0), label, &detail, !blocked, progress).clicked()
         {
             self.play(ctx);
+        }
+        ui.add_space(6.0);
+        if theme::button_sized(ui, Kind::Secondary, None, "SUMO PRACTICE", !blocked, w)
+            .on_hover_text("Start the game straight into the Sumo practice lobby")
+            .clicked()
+        {
+            self.play_sumo(ctx);
         }
         if self.busy == Busy::SigningIn && self.page == Page::Home {
             ui.add_space(4.0);

@@ -60,6 +60,8 @@ public final class SumoBrain {
     private final PlayerProfile profile;
     private final Random rng;
     private SumoDifficulty difficulty;
+    private ArenaShape arena = ArenaShape.square();
+    private Playstyle style = Playstyle.BALANCED;
     private final Controls out = new Controls();
 
     /** Delayed perception: oldest first, {x, y, z, onGround}. */
@@ -95,6 +97,19 @@ public final class SumoBrain {
 
     public SumoDifficulty difficulty() {
         return difficulty;
+    }
+
+    /** The platform it fights on (scanned at the start of each match). */
+    public void setArena(ArenaShape arena) {
+        this.arena = arena == null ? ArenaShape.square() : arena;
+    }
+
+    public void setPlaystyle(Playstyle style) {
+        this.style = style == null ? Playstyle.BALANCED : style;
+    }
+
+    public Playstyle playstyle() {
+        return style;
     }
 
     /** Forget everything that belongs to one round (not what was learned). */
@@ -179,12 +194,12 @@ public final class SumoBrain {
         float pitch = clamp(self.pitch + clamp(wrap(wantPitch - self.pitch), -maxTurn, maxTurn), -90f, 90f);
 
         // ---- Movement, as a world-space direction.
-        double selfEdge = SumoArena.edgeDistance(self.x, self.z);
-        double[] selfOut = SumoArena.nearestEdgeNormal(self.x, self.z);
-        double caution = difficulty.edgeCaution();
+        double selfEdge = arena.edgeDistance(self.x, self.z);
+        double[] selfOut = arena.nearestEdgeNormal(self.x, self.z);
+        double caution = clampD(difficulty.edgeCaution() + style.cautionOffset, 0.0, 1.0);
         double safe = 1.5 + 1.5 * caution;
-        double range = profile.typicalHitRange() > 0
-                ? clampD(profile.typicalHitRange() + 0.15 * w, 2.4, 3.0) : 2.7;
+        double range = clampD((profile.typicalHitRange() > 0
+                ? clampD(profile.typicalHitRange() + 0.15 * w, 2.4, 3.0) : 2.7) + style.rangeOffset, 2.2, 3.1);
 
         // Jumpy players: hold off while they are in the air and hit them as they land.
         if (!targetAir) waitForLanding = false;
@@ -196,6 +211,7 @@ public final class SumoBrain {
         if (dist > range + 0.5) approach = 1.0;
         else if (dist > 2.0) approach = target.hurtTime > 0 ? 1.0 : 0.6;
         else approach = target.hurtTime > 0 ? 0.8 : -0.4; // too close: make space
+        if (dist > 2.0) approach += style.approachBias;
         if (waitForLanding) approach = Math.min(approach, 0.0);
 
         if (--strafeTimer <= 0) pickStrafe(self, t, lx, lz, w);
@@ -204,12 +220,12 @@ public final class SumoBrain {
             strafeDir = -strafeDir;
             strafeTimer = Math.max(strafeTimer, 6);
         }
-        double strafeWeight = dist < 5 ? 0.85 : 0.4;
+        double strafeWeight = Math.min((dist < 5 ? 0.85 : 0.4) * style.strafeMul, 1.2);
         double mx = ux * approach + lx * strafeDir * strafeWeight;
         double mz = uz * approach + lz * strafeDir * strafeWeight;
 
-        double cx = SumoArena.CENTER_X - self.x;
-        double cz = SumoArena.CENTER_Z - self.z;
+        double cx = arena.safeX() - self.x;
+        double cz = arena.safeZ() - self.z;
         double cl = Math.max(Math.sqrt(cx * cx + cz * cz), 1e-6);
         cx /= cl;
         cz /= cl;
@@ -258,10 +274,11 @@ public final class SumoBrain {
             double chance = 0;
             if (dist > 3.4 && dist < 6.5) chance = 0.05 + 0.07 * difficulty.skill();
             chance += Math.min(profile.jumpsPerSecond(), 2.0) * 0.01 * w;
+            chance *= style.jumpMul;
             // A jump carries it ~2.5 blocks: only if it lands well inside.
             double landX = self.x + mx * 2.5;
             double landZ = self.z + mz * 2.5;
-            if (SumoArena.edgeDistance(landX, landZ) > 1.5 && rng.nextDouble() < chance) {
+            if (arena.edgeDistance(landX, landZ) > 1.5 && rng.nextDouble() < chance) {
                 jump = true;
                 jumpCooldown = 10 + rng.nextInt(20);
             }
@@ -293,12 +310,12 @@ public final class SumoBrain {
 
     private void pickStrafe(Body self, double[] t, double lx, double lz, double w) {
         // Where to stand so the player is between us and their nearest edge.
-        double[] tOut = SumoArena.nearestEdgeNormal(t[0], t[2]);
+        double[] tOut = arena.nearestEdgeNormal(t[0], t[2]);
         double idealX = t[0] - tOut[0] * 2.7;
         double idealZ = t[2] - tOut[1] * 2.7;
         double side = (idealX - self.x) * lx + (idealZ - self.z) * lz;
         double edgeFocus = 0.35 + 0.45 * w + 0.3 * profile.edgeHabit();
-        double targetEdge = SumoArena.edgeDistance(t[0], t[2]);
+        double targetEdge = arena.edgeDistance(t[0], t[2]);
         double preferred = profile.preferredLateral();
         if (targetEdge < 5 && Math.abs(side) > 0.3 && rng.nextDouble() < edgeFocus) {
             strafeDir = side > 0 ? 1 : -1;
@@ -309,6 +326,7 @@ public final class SumoBrain {
         }
         double run = profile.expectedStrafeRun();
         int base = run > 0 && rng.nextDouble() < w ? (int) Math.round(run) : 8 + rng.nextInt(15);
+        base = (int) Math.round(base * style.strafeTimeMul);
         strafeTimer = Math.max(4, Math.min(40, base + rng.nextInt(5) - 2));
     }
 
@@ -334,7 +352,7 @@ public final class SumoBrain {
                 }
             }
             boolean jumped = lastTOnGround && !target.onGround && target.y - lastTy > 0.05;
-            profile.recordTick(jumped, SumoArena.edgeDistance(target.x, target.z) < 2.5);
+            profile.recordTick(jumped, arena.edgeDistance(target.x, target.z) < 2.5);
         }
         haveLast = true;
         lastTx = target.x;

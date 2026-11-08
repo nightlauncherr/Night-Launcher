@@ -148,6 +148,9 @@ pub struct PlayRequest {
     pub cfg: LauncherConfig,
     pub game: GameSettings,
     pub account: LaunchAccount,
+    /// Started with the SUMO button: the game opens the Sumo practice world
+    /// from its main menu (`-Dkestrel.openSumo=true`).
+    pub open_sumo: bool,
 }
 
 /// Ensure installation, authenticate, build the command, start the game and
@@ -159,6 +162,7 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
         cfg,
         game,
         account,
+        open_sumo,
     } = req;
     let accounts_path = layout.accounts();
     let fail = |e: String| {
@@ -255,7 +259,7 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
         };
 
         // 4. Command.
-        let spec = launch::build(
+        let mut spec = launch::build(
             &state,
             &session,
             &game,
@@ -263,6 +267,10 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
             &layout,
             &Platform::current(),
         )?;
+        if open_sumo {
+            // A JVM option, so it goes before the main class with the others.
+            spec.args.insert(0, "-Dkestrel.openSumo=true".to_string());
+        }
         Ok((spec, lock, session.name))
     })();
 
