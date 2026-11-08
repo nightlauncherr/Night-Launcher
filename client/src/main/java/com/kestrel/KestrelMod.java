@@ -5,6 +5,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,11 +36,24 @@ public class KestrelMod {
         }
         client = new KestrelClient(dataDir, event.getModMetadata().version);
         client.preInit();
+        com.kestrel.sumo.Sumo.preInit();
     }
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         client.init();
+        com.kestrel.sumo.Sumo.init(this);
+    }
+
+    /** Singleplayer server starting (Sumo practice runs only in its own world). */
+    @Mod.EventHandler
+    public void serverStarting(FMLServerStartingEvent event) {
+        com.kestrel.sumo.Sumo.serverStarting(event);
+    }
+
+    @Mod.EventHandler
+    public void serverStopping(FMLServerStoppingEvent event) {
+        com.kestrel.sumo.Sumo.serverStopping();
     }
 
     @Mod.EventHandler
