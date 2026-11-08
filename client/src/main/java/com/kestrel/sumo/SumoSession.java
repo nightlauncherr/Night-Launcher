@@ -460,8 +460,6 @@ final class SumoSession {
                 chat(P + "There is no saved arena yet. /sumo save makes one.");
                 return;
             }
-            saved.platformSize = layout.platformSize;
-            saved.platformMaterial = layout.platformMaterial;
             layout = saved;
             saveLayout();
             chat(P + EnumChatFormatting.GREEN + "Your last saved arena is back.");

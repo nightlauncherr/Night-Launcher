@@ -85,9 +85,9 @@ public final class SumoView {
         hasSavedArena = s.hasSavedArena();
         savedEpochMs = l.savedEpochMs;
         double yaw = Math.toRadians(l.lobbySpawn.yaw);
-        labelX = l.lobbySpawn.x - Math.sin(yaw) * 3.5;
-        labelY = l.lobbySpawn.y + 2.2;
-        labelZ = l.lobbySpawn.z + Math.cos(yaw) * 3.5;
+        labelX = l.lobbySpawn.x - Math.sin(yaw) * 4.5;
+        labelY = l.lobbySpawn.y + 2.4;
+        labelZ = l.lobbySpawn.z + Math.cos(yaw) * 4.5;
     }
 
     /** The current session, or null outside the Sumo world. */

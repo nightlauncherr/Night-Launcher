@@ -21,7 +21,7 @@ import java.util.Map;
 final class SumoMenuScreen extends GuiScreen {
     private static final int W = 384;
     private static final int H = 224;
-    private static final long CONFIRM_MS = 4000;
+    private static final long CONFIRM_MS = 6000;
 
     private static final int START = 1;
     private static final int SECOND = 2;

@@ -107,7 +107,7 @@ public final class SumoClient {
         GL11.glNormal3f(0F, 1F, 0F);
         GlStateManager.rotate(-mc.getRenderManager().playerViewY, 0F, 1F, 0F);
         GlStateManager.rotate(mc.getRenderManager().playerViewX, 1F, 0F, 0F);
-        float s = 0.025F;
+        float s = 0.018F;
         GlStateManager.scale(-s, -s, s);
         GlStateManager.disableLighting();
         GlStateManager.enableBlend();
