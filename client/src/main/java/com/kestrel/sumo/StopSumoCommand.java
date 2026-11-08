@@ -39,7 +39,7 @@ final class StopSumoCommand extends CommandBase {
     @Override
     public void processCommand(ICommandSender sender, String[] args) {
         SumoSession s = server.session();
-        if (s == null || !s.stopMatch()) {
+        if (s == null || !s.stopMatch(true)) {
             sender.addChatMessage(new ChatComponentText(EnumChatFormatting.LIGHT_PURPLE + "[Sumo] " + EnumChatFormatting.GRAY
                     + "No Sumo match is running" + (s != null && s.phase() == SumoSession.Phase.EDIT ? " (edit mode is on)." : ".")));
         }

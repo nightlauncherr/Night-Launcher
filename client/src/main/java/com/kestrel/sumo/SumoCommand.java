@@ -21,6 +21,9 @@ final class SumoCommand extends CommandBase {
     private static final List<String> SUBS = Arrays.asList("start", "lobby", "edit", "save", "reset", "setspawn", "help",
             "stats", "resetstats", "platform", "difficulty", "style");
 
+    /** Subcommands that change the map. */
+    private static final List<String> EDIT_SUBS = Arrays.asList("edit", "save", "reset", "setspawn", "platform");
+
     private final SumoServer server;
 
     SumoCommand(SumoServer server) {
@@ -58,6 +61,12 @@ final class SumoCommand extends CommandBase {
         String a1 = args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "";
         String a2 = args.length > 2 ? args[2].toLowerCase(Locale.ROOT) : "";
         boolean confirmed = Arrays.asList(args).subList(Math.min(1, args.length), args.length).contains("confirm");
+        // Arena editing belongs to the map's owner (checked by UUID, not name); the session
+        // checks again for every edit action.
+        if (EDIT_SUBS.contains(sub) && !SumoPermissions.canEdit(sender)) {
+            say(sender, EnumChatFormatting.RED + SumoPermissions.DENIED);
+            return;
+        }
         switch (sub) {
             case "start":
             case "rematch":
@@ -65,7 +74,7 @@ final class SumoCommand extends CommandBase {
                 break;
             case "lobby":
                 if (s.phase() == SumoSession.Phase.EDIT) s.setEdit(false);
-                else if (!s.stopMatch()) s.enterLobby();
+                else if (!s.stopMatch(false)) s.enterLobby(false);
                 break;
             case "edit":
                 s.setEdit(!"off".equals(a1));
@@ -76,12 +85,11 @@ final class SumoCommand extends CommandBase {
             case "reset":
                 if ("default".equals(a1)) {
                     if (!confirmed) {
-                        say(sender, EnumChatFormatting.YELLOW + "[Sumo] This replaces the arena with the default platform and lobby. "
+                        say(sender, EnumChatFormatting.YELLOW + "[Sumo] This puts back the official Sumo map (arena and lobby). "
                                 + "The current blocks are backed up first. Type /sumo reset default confirm");
                         return;
                     }
-                    ArenaLayout d = ArenaLayout.defaults();
-                    s.rebuildDefault(d.platformSize, d.platformMaterial, "before-default");
+                    s.restoreOfficial();
                 } else {
                     if (!confirmed) {
                         say(sender, EnumChatFormatting.YELLOW + "[Sumo] This puts back your last saved arena (/sumo save), "
@@ -157,14 +165,18 @@ final class SumoCommand extends CommandBase {
                 }
                 break;
             default:
-                help(sender);
+                help(sender, SumoPermissions.canEdit(sender));
                 break;
         }
     }
 
     @Override
     public List<String> addTabCompletionOptions(ICommandSender sender, String[] args, BlockPos pos) {
-        if (args.length == 1) return getListOfStringsMatchingLastWord(args, SUBS.toArray(new String[0]));
+        if (args.length == 1) {
+            List<String> subs = new ArrayList<String>(SUBS);
+            if (!SumoPermissions.canEdit(sender)) subs.removeAll(EDIT_SUBS);
+            return getListOfStringsMatchingLastWord(args, subs.toArray(new String[0]));
+        }
         if (args.length == 2) {
             switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "edit":
@@ -204,7 +216,20 @@ final class SumoCommand extends CommandBase {
         return b.toString();
     }
 
-    private static void help(ICommandSender sender) {
+    private static void help(ICommandSender sender, boolean editor) {
+        String[] common = {
+                EnumChatFormatting.LIGHT_PURPLE + "Sumo practice commands" + EnumChatFormatting.DARK_GRAY + " (M opens the Sumo menu)",
+                "/sumo start - start a match (rounds then repeat by themselves)",
+                "/stopsumo - stop the running match, back to the lobby",
+                "/sumo lobby - back to the lobby",
+                "/sumo difficulty adaptive|easy|medium|hard|expert",
+                "/sumo style balanced|aggressive|defensive|strafer",
+                "/sumo stats | /sumo resetstats confirm",
+        };
+        if (!editor) {
+            for (String l : common) say(sender, EnumChatFormatting.GRAY + l);
+            return;
+        }
         String[] lines = {
                 EnumChatFormatting.LIGHT_PURPLE + "Sumo practice commands" + EnumChatFormatting.DARK_GRAY + " (M opens the Sumo menu)",
                 "/sumo start - start a match (also REMATCH)",
@@ -214,7 +239,7 @@ final class SumoCommand extends CommandBase {
                 "/sumo setspawn player|ai|lobby - set a start where you stand",
                 "/sumo save - save the arena blocks and start positions",
                 "/sumo reset confirm - restore your last saved arena",
-                "/sumo reset default confirm - default arena (current one backed up)",
+                "/sumo reset default confirm - official map back (current one backed up)",
                 "/sumo platform <size> <block> confirm - rebuild a square platform",
                 "/sumo difficulty adaptive|easy|medium|hard|expert",
                 "/sumo style balanced|aggressive|defensive|strafer",

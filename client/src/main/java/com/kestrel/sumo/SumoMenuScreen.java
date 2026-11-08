@@ -87,7 +87,7 @@ final class SumoMenuScreen extends GuiScreen {
         edit = add(new SumoButton(EDIT, rx, ay, half, 16, "", false));
         save = add(new SumoButton(SAVE, rx + half + 4, ay, half, 16, "Save arena", false));
         restore = add(new SumoButton(RESTORE, rx, ay + 18, half, 16, "Restore save", false));
-        defaults = add(new SumoButton(DEFAULT, rx + half + 4, ay + 18, half, 16, "Default arena", false));
+        defaults = add(new SumoButton(DEFAULT, rx + half + 4, ay + 18, half, 16, "Official map", false));
         sizeDown = add(new SumoButton(SIZE_DOWN, rx, ay + 36, 16, 16, "-", false));
         sizeUp = add(new SumoButton(SIZE_UP, rx + 56, ay + 36, 16, 16, "+", false));
         material = add(new SumoButton(MATERIAL, rx + 76, ay + 36, rw - 76, 16, "", false));
@@ -129,11 +129,11 @@ final class SumoMenuScreen extends GuiScreen {
             start.displayString = "MATCH RUNNING";
             second.displayString = "STOP";
         } else if (v.finished) {
-            start.displayString = "REMATCH";
-            second.displayString = "LOBBY";
+            start.displayString = "NEXT ROUND NOW";
+            second.displayString = "STOP";
         } else {
             start.displayString = "START SUMO";
-            second.displayString = "Edit";
+            second.displayString = v.canEdit ? "Edit" : "Close";
         }
         start.enabled = !v.matchRunning;
         difficulty.displayString = "Difficulty: " + v.modeLabel + (v.adaptive ? " (" + v.effectivePercent + "%)" : "");
@@ -141,6 +141,11 @@ final class SumoMenuScreen extends GuiScreen {
         edit.displayString = v.editing ? "Edit mode: ON" : "Edit mode: OFF";
         edit.highlight = v.editing;
         boolean idle = !v.matchRunning;
+        // Arena controls only exist for the map's owner (the server refuses them for anyone else too).
+        for (SumoButton b : new SumoButton[]{edit, save, restore, defaults, sizeDown, sizeUp, material, rebuild,
+                spawnPlayer, spawnAi, spawnLobby}) {
+            b.visible = v.canEdit;
+        }
         edit.enabled = idle;
         save.enabled = idle;
         restore.enabled = idle && v.hasSavedArena;
@@ -157,7 +162,7 @@ final class SumoMenuScreen extends GuiScreen {
         rebuild.displayString = confirming(REBUILD) ? "Click again: rebuild " + size + "x" + size
                 : "Rebuild platform " + size + " x " + size;
         restore.displayString = confirming(RESTORE) ? "Click again" : "Restore save";
-        defaults.displayString = confirming(DEFAULT) ? "Click again" : "Default arena";
+        defaults.displayString = confirming(DEFAULT) ? "Click again" : "Official map";
         resetStats.displayString = confirming(RESET_STATS) ? "Click again" : "Reset stats";
         for (Object o : buttonList) {
             SumoButton b = (SumoButton) o;
@@ -196,9 +201,9 @@ final class SumoMenuScreen extends GuiScreen {
                 break;
             case SECOND:
                 if (v.editing) run("/sumo save", false);
-                else if (v.matchRunning) run("/stopsumo", false);
-                else if (v.finished) run("/sumo lobby", false);
-                else run("/sumo edit", true);
+                else if (v.matchRunning || v.finished) run("/stopsumo", false);
+                else if (v.canEdit) run("/sumo edit", true);
+                else mc.displayGuiScreen(null);
                 break;
             case DIFFICULTY:
                 run("/sumo difficulty " + modeOf(v).next().name().toLowerCase(), false);
@@ -301,7 +306,7 @@ final class SumoMenuScreen extends GuiScreen {
         String sub;
         if (v.finished) {
             sub = v.lastResult + "§7 in " + String.format("%.1fs", v.lastDurationMs / 1000.0) + ". Session " + v.scorePlayer + " - " + v.scoreBot
-                    + ". REMATCH or back to the LOBBY.";
+                    + ". The next round starts by itself.";
         } else if (v.editing) {
             sub = "Build freely in creative. Save arena keeps it; Finish editing returns to the lobby.";
         } else if (v.matchRunning) {
@@ -339,12 +344,17 @@ final class SumoMenuScreen extends GuiScreen {
 
         // Arena.
         text("Arena", rx, py + 94, Theme.TEXT);
-        String saved = v.hasSavedArena ? (v.savedEpochMs > 0 ? "saved " + new SimpleDateFormat("MMM d, HH:mm").format(new Date(v.savedEpochMs))
-                : "saved") : "no save yet";
-        text(saved, px + W - 8 - fontRendererObj.getStringWidth(saved), py + 94, Theme.MUTED);
-        String size = String.valueOf(size(v));
-        text(size, rx + 36 - fontRendererObj.getStringWidth(size) / 2, py + 144, Theme.TEXT);
-        text("Set start to where you stand:", rx, py + 178, Theme.MUTED);
+        if (v.canEdit) {
+            String saved = v.hasSavedArena ? (v.savedEpochMs > 0 ? "saved " + new SimpleDateFormat("MMM d, HH:mm").format(new Date(v.savedEpochMs))
+                    : "saved") : "no save yet";
+            text(saved, px + W - 8 - fontRendererObj.getStringWidth(saved), py + 94, Theme.MUTED);
+            String size = String.valueOf(size(v));
+            text(size, rx + 36 - fontRendererObj.getStringWidth(size) / 2, py + 144, Theme.TEXT);
+            text("Set start to where you stand:", rx, py + 178, Theme.MUTED);
+        } else {
+            text("Official Night Sumo map", rx, py + 106, Theme.MUTED);
+            text("Editing is limited to the map's owner.", rx, py + 118, Theme.MUTED);
+        }
         String key = Keyboard.getKeyName(client.menuKey().getKeyCode());
         text("Esc or " + key + " closes", rx, py + H - 13, Theme.MUTED);
         super.drawScreen(mx, my, pt);

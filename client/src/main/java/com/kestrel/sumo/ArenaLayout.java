@@ -70,12 +70,12 @@ public final class ArenaLayout {
     public int platformSize = SumoArena.MAX - SumoArena.MIN + 1;
     public String platformMaterial = MATERIALS[0][0];
     /** Snapshot area (inclusive block bounds) for save/reset. */
-    public int regionMinX = -32;
-    public int regionMaxX = 32;
+    public int regionMinX = -48;
+    public int regionMaxX = 48;
     public int regionMinY = 64;
     public int regionMaxY = 136;
-    public int regionMinZ = -32;
-    public int regionMaxZ = 32;
+    public int regionMinZ = -48;
+    public int regionMaxZ = 48;
     public long savedEpochMs;
 
     /** Selectable platform blocks: {id, label}. Ids are resolved by {@code SumoWorldSetup}. */

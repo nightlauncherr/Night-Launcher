@@ -39,6 +39,8 @@ final class SumoSession {
     private static final int COUNTDOWN_TICKS = 60;
     /** A match nobody wins in 3 minutes is a draw. */
     private static final int MAX_FIGHT_TICKS = 20 * 180;
+    /** Pause on the result before the next round starts by itself. */
+    private static final int NEXT_ROUND_TICKS = 60;
     private static final String P = EnumChatFormatting.LIGHT_PURPLE + "[Sumo] " + EnumChatFormatting.GRAY;
 
     private final WorldServer world;
@@ -130,29 +132,14 @@ final class SumoSession {
         stats = SumoStats.load(statsFile());
         prefs = SumoPrefs.load(SumoPrefs.file(dataDir));
         SumoWorldSetup.applyRules(world);
+        // The blocks are never generated or rebuilt on load: the world is the official
+        // map (installed by OfficialMap before it opened), as the player left it.
         layout = ArenaLayout.load(ArenaLayout.file(dataDir));
-        boolean newWorld = world.getTotalWorldTime() < 40;
         if (layout == null) {
-            // First time ever: the default arena and lobby, kept as the first save.
-            layout = ArenaLayout.defaults();
-            SumoWorldSetup.buildDefault(world, layout);
+            layout = OfficialMap.layout();
             saveLayout();
-            try {
-                ArenaStore.save(world, layout, ArenaLayout.snapshot(dataDir));
-            } catch (IOException e) {
-                log.error("[Kestrel] cannot write the first Sumo arena save", e);
-            }
-        } else if (newWorld) {
-            // The world was made again (for example an unreadable save was set aside):
-            // bring back the player's last saved arena rather than the default.
-            ArenaLayout saved = null;
-            try {
-                saved = ArenaStore.restore(world, ArenaLayout.snapshot(dataDir));
-            } catch (IOException e) {
-                log.error("[Kestrel] cannot restore the saved Sumo arena", e);
-            }
-            if (saved == null) SumoWorldSetup.buildDefault(world, layout);
         }
+        keepOfficialSnapshot();
         brain = new SumoBrain(new SumoDifficulty(skill()), stats.profile, rng);
         brain.setPlaystyle(prefs.style());
         log.info("[Kestrel] Sumo session started (matches {}, difficulty {}, {})", stats.matches,
@@ -180,7 +167,7 @@ final class SumoSession {
         removeStrays();
         chat(P + "Welcome to the Sumo practice lobby. Press " + EnumChatFormatting.WHITE + "M"
                 + EnumChatFormatting.GRAY + " for the Sumo menu, or /sumo help.");
-        enterLobby();
+        enterLobby(true);
     }
 
     void onPlayerLeave(EntityPlayer p) {
@@ -189,8 +176,28 @@ final class SumoSession {
 
     // ---- State changes.
 
-    /** Back to the lobby from any state. */
-    void enterLobby() {
+    /** Whether this player may edit the Sumo world (checked by UUID on every edit action). */
+    boolean canEdit() {
+        return player != null && SumoPermissions.canEdit(player);
+    }
+
+    /** Whether {@code p} may change blocks right now: the owner, in edit mode. */
+    boolean blockEditAllowed(EntityPlayer p) {
+        return phase == Phase.EDIT && p != null && p == player && SumoPermissions.canEdit(p);
+    }
+
+    /** Refuses (with the standard message) when the player may not edit. */
+    private boolean requireEdit() {
+        if (canEdit()) return true;
+        chat(EnumChatFormatting.RED + SumoPermissions.DENIED);
+        return false;
+    }
+
+    /**
+     * Back to the lobby from any state. The Sumo menu opens only when
+     * {@code openMenu} is set: on first entering the world and on /stopsumo.
+     */
+    void enterLobby(boolean openMenu) {
         removeBot();
         phase = Phase.LOBBY;
         timer = 0;
@@ -200,7 +207,7 @@ final class SumoSession {
         teleport(layout.lobbySpawn);
         clearTitle();
         publish();
-        SumoView.request(SumoView.Screen.LOBBY);
+        if (openMenu) SumoView.request(SumoView.Screen.LOBBY);
     }
 
     /** START SUMO / REMATCH. */
@@ -239,18 +246,22 @@ final class SumoSession {
         return true;
     }
 
-    /** /stopsumo: end the match now (not counted) and return to the lobby. */
-    boolean stopMatch() {
+    /**
+     * /stopsumo: end the match now (not counted, also between rounds), remove the
+     * opponent and return to the lobby. {@code openMenu}: open the Sumo menu once.
+     */
+    boolean stopMatch(boolean openMenu) {
         if (phase != Phase.COUNTDOWN && phase != Phase.FIGHT && phase != Phase.FINISHED) return false;
         brain.resetRound();
         saveStats(); // keeps what it learned this match; the match itself isn't counted
-        chat(P + (phase == Phase.FINISHED ? "Back to the lobby." : "Match stopped (not counted). Back to the lobby."));
-        enterLobby();
+        chat(P + (phase == Phase.FINISHED ? "Stopped. Back to the lobby." : "Match stopped (not counted). Back to the lobby."));
+        enterLobby(openMenu);
         return true;
     }
 
     void setEdit(boolean on) {
         if (player == null) return;
+        if (on && !requireEdit()) return;
         if (on) {
             if (phase == Phase.EDIT) {
                 chat(P + "Edit mode is already on.");
@@ -273,7 +284,7 @@ final class SumoSession {
             }
             saveLayout();
             chat(P + "Edit mode off. Your blocks stay as they are; /sumo save stores them as your arena save.");
-            enterLobby();
+            enterLobby(false);
         }
     }
 
@@ -286,6 +297,14 @@ final class SumoSession {
             return;
         }
         SumoWorldSetup.keepClear(world);
+        // Creative only in edit mode, and edit mode only for the map's owner: a game
+        // mode changed any other way (cheats, LAN) is put back at once.
+        if (phase == Phase.EDIT && !canEdit()) {
+            chat(EnumChatFormatting.RED + SumoPermissions.DENIED);
+            enterLobby(false);
+        } else if (phase != Phase.EDIT && player.theItemInWorldManager.getGameType() != WorldSettings.GameType.ADVENTURE) {
+            player.setGameType(WorldSettings.GameType.ADVENTURE);
+        }
         switch (phase) {
             case LOBBY:
                 if (player.posY < layout.lobbySpawn.y - 12) teleport(layout.lobbySpawn);
@@ -317,7 +336,9 @@ final class SumoSession {
                 else if (fightTicks >= MAX_FIGHT_TICKS) endMatch(SumoStats.Result.DRAW);
                 break;
             case FINISHED:
+                // The result shows as a title; the next round starts by itself (no menu).
                 if (player.posY < layout.loseY() - 10) teleport(layout.playerSpawn);
+                if (--timer <= 0 && !startMatch()) enterLobby(false);
                 break;
             default:
                 break;
@@ -388,11 +409,11 @@ final class SumoSession {
         title(head, scoreLine());
         chat(head + EnumChatFormatting.GRAY + String.format(" (%.1fs, hits %d-%d) ", ms / 1000.0, hitsByPlayer, hitsByBot)
                 + overallLine());
+        chat(EnumChatFormatting.DARK_GRAY + "Next round in " + (NEXT_ROUND_TICKS / 20) + "s. /stopsumo or M to stop.");
         phase = Phase.FINISHED;
-        timer = 0;
+        timer = NEXT_ROUND_TICKS;
         placeAtStarts();
         publish();
-        SumoView.request(SumoView.Screen.RESULT);
     }
 
     // ---- Arena editing.
@@ -402,7 +423,7 @@ final class SumoSession {
     }
 
     void setSpawn(String which) {
-        if (player == null) return;
+        if (player == null || !requireEdit()) return;
         if (matchActive()) {
             chat(P + "Stop the match first (/stopsumo).");
             return;
@@ -434,6 +455,7 @@ final class SumoSession {
     }
 
     void saveArena() {
+        if (!requireEdit()) return;
         if (matchActive()) {
             chat(P + "Stop the match first (/stopsumo).");
             return;
@@ -451,9 +473,55 @@ final class SumoSession {
         publish();
     }
 
+    /**
+     * The first time a copy of the official map is opened (before anyone could
+     * change it), keep a block snapshot of it, so the owner's "Default arena"
+     * brings back exactly the official map.
+     */
+    private void keepOfficialSnapshot() {
+        File worldDir = world.getSaveHandler().getWorldDirectory();
+        int v = OfficialMap.installedVersion(worldDir);
+        if (v <= 0) return;
+        File snap = officialSnapshot(v);
+        if (snap.isFile()) return;
+        try {
+            ArenaStore.save(world, OfficialMap.layout(), snap);
+        } catch (IOException e) {
+            log.error("[Kestrel] cannot keep the official Sumo map snapshot", e);
+        }
+    }
+
+    private File officialSnapshot(int version) {
+        return new File(ArenaLayout.dir(dataDir), "arena-blocks.official-v" + version + ".dat");
+    }
+
+    /** "Default arena": the official map's blocks and start positions (what's there is backed up first). */
+    void restoreOfficial() {
+        if (!requireEdit()) return;
+        if (matchActive()) stopMatch(false);
+        File snap = officialSnapshot(OfficialMap.installedVersion(world.getSaveHandler().getWorldDirectory()));
+        if (!snap.isFile()) {
+            chat(EnumChatFormatting.RED + "[Sumo] The official map snapshot isn't available in this world.");
+            return;
+        }
+        try {
+            File backup = ArenaStore.backupCurrent(world, layout, ArenaLayout.dir(dataDir), "before-official");
+            ArenaStore.restore(world, snap);
+            layout = OfficialMap.layout();
+            saveLayout();
+            chat(P + EnumChatFormatting.GREEN + "The official Sumo map is back" + EnumChatFormatting.GRAY
+                    + " (what was there is backed up in " + backup.getName() + ").");
+            if (phase != Phase.EDIT) enterLobby(false);
+        } catch (IOException e) {
+            chat(EnumChatFormatting.RED + "[Sumo] Not changed: " + e.getMessage());
+        }
+        publish();
+    }
+
     /** Restore the last {@code /sumo save}. */
     void restoreArena() {
-        if (matchActive()) stopMatch();
+        if (!requireEdit()) return;
+        if (matchActive()) stopMatch(false);
         try {
             ArenaLayout saved = ArenaStore.restore(world, ArenaLayout.snapshot(dataDir));
             if (saved == null) {
@@ -463,7 +531,7 @@ final class SumoSession {
             layout = saved;
             saveLayout();
             chat(P + EnumChatFormatting.GREEN + "Your last saved arena is back.");
-            if (phase != Phase.EDIT) enterLobby();
+            if (phase != Phase.EDIT) enterLobby(false);
         } catch (IOException e) {
             chat(EnumChatFormatting.RED + "[Sumo] Could not restore the arena: " + e.getMessage());
         }
@@ -475,7 +543,8 @@ final class SumoSession {
      * What was there is backed up first, never just deleted.
      */
     void rebuildDefault(int size, String material, String reason) {
-        if (matchActive()) stopMatch();
+        if (!requireEdit()) return;
+        if (matchActive()) stopMatch(false);
         try {
             File backup = ArenaStore.backupCurrent(world, layout, ArenaLayout.dir(dataDir), reason);
             ArenaLayout next = ArenaLayout.defaults();
@@ -494,7 +563,7 @@ final class SumoSession {
             chat(P + "Built a " + layout.platformSize + " x " + layout.platformSize + " " + ArenaLayout.materialLabel(layout.platformMaterial)
                     + " platform. What was there before is backed up in " + backup.getName()
                     + ". /sumo reset confirm brings back your last save; /sumo save keeps this one.");
-            if (phase != Phase.EDIT) enterLobby();
+            if (phase != Phase.EDIT) enterLobby(false);
         } catch (IOException e) {
             chat(EnumChatFormatting.RED + "[Sumo] Not changed: the backup of the current arena failed (" + e.getMessage() + ").");
         }
@@ -524,7 +593,7 @@ final class SumoSession {
         brain.setPlaystyle(prefs.style());
         scorePlayer = 0;
         scoreBot = 0;
-        if (matchActive() || phase == Phase.FINISHED) enterLobby();
+        if (matchActive() || phase == Phase.FINISHED) enterLobby(false);
         publish();
     }
 

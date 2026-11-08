@@ -16,6 +16,8 @@ public final class SumoView {
 
     public final String phase;
     public final boolean editing;
+    /** The player may edit the map (the owner's account). */
+    public final boolean canEdit;
     public final boolean matchRunning;
     public final boolean finished;
     public final String lastResult;
@@ -56,6 +58,7 @@ public final class SumoView {
         SumoSession.Phase ph = s.phase();
         phase = ph.name();
         editing = ph == SumoSession.Phase.EDIT;
+        canEdit = s.canEdit();
         matchRunning = ph == SumoSession.Phase.COUNTDOWN || ph == SumoSession.Phase.FIGHT;
         finished = ph == SumoSession.Phase.FINISHED;
         lastResult = s.lastResult();

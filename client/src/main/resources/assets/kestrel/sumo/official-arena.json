@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "playerSpawn": {
+    "x": -3.0,
+    "y": 100.0,
+    "z": 0.5,
+    "yaw": -90.0
+  },
+  "aiSpawn": {
+    "x": 4.0,
+    "y": 100.0,
+    "z": 0.5,
+    "yaw": 90.0
+  },
+  "lobbySpawn": {
+    "x": 0.5,
+    "y": 100.0,
+    "z": -27.0,
+    "yaw": 0.0
+  },
+  "platformSize": 15,
+  "platformMaterial": "light_gray_clay",
+  "regionMinX": -48,
+  "regionMaxX": 48,
+  "regionMinY": 64,
+  "regionMaxY": 136,
+  "regionMinZ": -48,
+  "regionMaxZ": 48,
+  "savedEpochMs": 1794115314188
+}

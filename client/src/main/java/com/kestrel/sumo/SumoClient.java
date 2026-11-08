@@ -94,12 +94,12 @@ public final class SumoClient {
         String key = Keyboard.getKeyName(menuKey.getKeyCode());
         String[] lines = {
                 EnumChatFormatting.LIGHT_PURPLE + "" + EnumChatFormatting.BOLD + "NIGHT SUMO PRACTICE",
-                EnumChatFormatting.WHITE + "Press " + EnumChatFormatting.LIGHT_PURPLE + key + EnumChatFormatting.WHITE + " and choose START SUMO",
+                EnumChatFormatting.LIGHT_PURPLE + "PRESS " + key.toUpperCase(java.util.Locale.ROOT) + " TO OPEN SUMO MENU",
                 EnumChatFormatting.GRAY + "Knock " + EntitySumoBot.NAME + " off the platform; don't fall yourself.",
                 EnumChatFormatting.GRAY + "Opponent: " + EnumChatFormatting.WHITE + v.modeLabel + " " + v.effectivePercent + "%"
                         + EnumChatFormatting.GRAY + ", " + EnumChatFormatting.WHITE + v.styleLabel
                         + EnumChatFormatting.GRAY + "   Record " + EnumChatFormatting.WHITE + v.wins + "-" + v.losses,
-                EnumChatFormatting.DARK_GRAY + "/sumo help  -  /sumo edit to build the arena",
+                EnumChatFormatting.DARK_GRAY + "/sumo help  -  /stopsumo ends a match",
         };
         FontRenderer font = mc.fontRendererObj;
         GlStateManager.pushMatrix();
