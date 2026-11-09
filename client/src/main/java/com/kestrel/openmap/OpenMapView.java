@@ -45,6 +45,10 @@ public final class OpenMapView {
     public final double labelX;
     public final double labelY;
     public final double labelZ;
+    /** The play area (world border), for the client's culling and edge haze. */
+    public final double borderCenterX;
+    public final double borderCenterZ;
+    public final double borderSize;
 
     OpenMapView(OpenMapSession s) {
         PvpStats st = s.stats();
@@ -86,6 +90,9 @@ public final class OpenMapView {
         labelX = l.lobbySpawn.x - Math.sin(yaw) * 4.5;
         labelY = l.lobbySpawn.y + 2.4;
         labelZ = l.lobbySpawn.z + Math.cos(yaw) * 4.5;
+        borderCenterX = l.centerX;
+        borderCenterZ = l.centerZ;
+        borderSize = l.size;
     }
 
     public static OpenMapView current() {

@@ -4,6 +4,7 @@ import com.kestrel.KestrelMod;
 import com.kestrel.menu.KestrelMainMenu;
 import com.kestrel.sumo.SumoClient;
 import com.kestrel.util.RenderUtil;
+import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiMainMenu;
@@ -12,7 +13,10 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.potion.Potion;
 import net.minecraft.util.EnumChatFormatting;
+import net.minecraftforge.client.event.EntityViewRenderEvent;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -51,6 +55,19 @@ public final class OpenMapClient {
         boolean open = OpenMapView.takeRequest();
         while (key().isPressed()) open = true;
         if (open) mc.displayGuiScreen(new OpenMapMenuScreen());
+    }
+
+    /** Near the map edge, a light haze so the land fades out before the culled area. Terrain fog only. */
+    @SubscribeEvent
+    public void onFog(EntityViewRenderEvent.RenderFogEvent e) {
+        if (e.fogMode != 0) return; // -1 is the sky: leave it as it is
+        OpenMapView view = OpenMapView.current();
+        if (view == null || e.entity == null || e.block.getMaterial() != Material.air) return; // water/lava fog stays
+        if (e.entity instanceof EntityLivingBase && ((EntityLivingBase) e.entity).isPotionActive(Potion.blindness)) return;
+        float end = OpenMapCull.fogEnd(view, e.entity.posX, e.entity.posZ, e.farPlaneDistance);
+        if (Float.isNaN(end)) return;
+        GlStateManager.setFogStart(OpenMapCull.fogStart(end));
+        GlStateManager.setFogEnd(end);
     }
 
     private void autoOpen(Minecraft mc) {
