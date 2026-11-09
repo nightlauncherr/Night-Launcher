@@ -20,6 +20,7 @@ import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.network.play.server.S45PacketTitle;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
@@ -90,6 +91,15 @@ final class OpenMapSession {
     private int recentDecay;
     private int sprintResetWindow;
     private boolean sprintDropped;
+
+    // Inventories last the whole session (from entering the world until leaving it).
+    private boolean playerKitGiven;
+    private final ItemStack[] botHotbar = new ItemStack[4];
+    private final ItemStack[] botArmor = new ItemStack[4];
+    private boolean botKitGiven;
+    /** The player's PvP inventory while the owner is in edit mode (creative). */
+    private ItemStack[] stashMain;
+    private ItemStack[] stashArmor;
 
     private final PvpBrain.Self self = new PvpBrain.Self();
     private final PvpBrain.Target target = new PvpBrain.Target();
@@ -184,6 +194,13 @@ final class OpenMapSession {
                 layout.centerZ = world.getWorldBorder().getCenterZ();
                 saveLayout();
             }
+            File worldDir = world.getSaveHandler().getWorldDirectory();
+            if (OpenMapWorldSetup.terrainVersion(worldDir) < OpenMapTerrain.VERSION && backedUp(worldDir)) {
+                // One-time flattening of this world (a copy of the old one is set aside first).
+                OpenMapTerrain.apply(world, layout, log);
+                saveLayout();
+                OpenMapWorldSetup.writeMarker(worldDir, OpenMapTerrain.VERSION);
+            }
         } catch (IOException e) {
             log.error("[Kestrel] Open Map world setup failed", e);
         }
@@ -193,6 +210,19 @@ final class OpenMapSession {
         log.info("[Kestrel] Open Map session started (matches {}, difficulty {}, {})", stats.matches,
                 String.format("%.2f", stats.difficulty), prefs.style().label);
         publish();
+    }
+
+    /** A copy of the world from before the flattening exists (made now if needed); no copy, no change. */
+    private boolean backedUp(File worldDir) {
+        File[] old = worldDir.getParentFile().listFiles(new java.io.FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return name.startsWith(OpenMapWorldSetup.WORLD_FOLDER + "-before-flatten-");
+            }
+        });
+        if (old != null && old.length > 0) return true;
+        if (OpenMapWorldSetup.isFresh(world)) return true; // just generated: nothing of the player's to keep
+        return OpenMapWorlds.backup(worldDir, "before-flatten");
     }
 
     void stop(String reason) {
@@ -210,6 +240,11 @@ final class OpenMapSession {
         if (phase == Phase.STOPPED || p.worldObj != world) return;
         if (player != null && player != p) return;
         player = p;
+        if (!playerKitGiven) {
+            // A new session: the starting inventory, exactly once. Rounds never refill it.
+            giveKit(p);
+            playerKitGiven = true;
+        }
         chat(P + "Welcome to Open Map PvP. Press " + EnumChatFormatting.WHITE + "M" + EnumChatFormatting.GRAY
                 + " for the menu, or /openmap help.");
         enterLobby(true);
@@ -230,7 +265,6 @@ final class OpenMapSession {
         fightTicks = 0;
         if (player == null) return;
         player.setGameType(WorldSettings.GameType.ADVENTURE);
-        clearInventory(player);
         refresh(player);
         teleport(layout.lobbySpawn);
         clearTitle();
@@ -255,8 +289,7 @@ final class OpenMapSession {
         brain.setPlaystyle(prefs.style());
         brain.resetRound();
         player.setGameType(WorldSettings.GameType.SURVIVAL);
-        giveKit(player);
-        refresh(player);
+        refresh(player); // health, food and effects reset each round; the inventory does not
         spawnBot();
         placeAtStarts();
         resetRoundCounts();
@@ -385,9 +418,22 @@ final class OpenMapSession {
         target.sprinting = player.isSprinting();
         target.visible = e.canEntityBeSeen(player);
         target.hurtTime = player.hurtTime;
+        warnOfProjectiles(e);
         PvpBrain.Controls c = brain.tick(self, target);
         e.apply(c, player);
         if (e.lastPlaceResult != 0) brain.onPlaceResult(e.lastPlaceResult > 0);
+    }
+
+    /** The player's snowballs and rod hook in flight near the opponent (it can see them coming). */
+    private void warnOfProjectiles(EntityPvpBot e) {
+        AxisAlignedBB near = e.getEntityBoundingBox().expand(14, 6, 14);
+        for (Entity p : world.getEntitiesWithinAABB(Entity.class, near)) {
+            boolean thrown = p instanceof EntitySnowball && !(p instanceof BotSnowball)
+                    && ((EntitySnowball) p).getThrower() == player;
+            boolean hook = p instanceof EntityFishHook && ((EntityFishHook) p).angler == player
+                    && ((EntityFishHook) p).caughtEntity == null;
+            if ((thrown || hook) && !p.isDead) brain.incoming(p.posX, p.posY, p.posZ, p.motionX, p.motionY, p.motionZ);
+        }
     }
 
     // ---- Damage and deaths.
@@ -524,6 +570,7 @@ final class OpenMapSession {
             }
             undoRound();
             removeBot();
+            stashInventory();
             phase = Phase.EDIT;
             player.setGameType(WorldSettings.GameType.CREATIVE);
             clearTitle();
@@ -536,7 +583,7 @@ final class OpenMapSession {
                 chat(P + "Edit mode isn't on.");
                 return;
             }
-            clearInventory(player);
+            restoreInventory();
             saveWorld();
             chat(P + "Edit mode off. Your changes are saved with the world.");
             enterLobby(false);
@@ -724,7 +771,11 @@ final class OpenMapSession {
 
     // ---- Helpers.
 
-    /** The player's kit: iron armor; hotbar sword, 64 oak planks, rod, 32 snowballs, 1 golden apple; nothing else. */
+    /**
+     * The player's starting inventory, given once per session: diamond armor;
+     * hotbar iron sword, 64 oak planks, fishing rod, 32 snowballs, 3 golden
+     * apples; nothing else.
+     */
     static void giveKit(EntityPlayerMP p) {
         clearInventory(p);
         InventoryPlayer inv = p.inventory;
@@ -732,13 +783,34 @@ final class OpenMapSession {
         inv.mainInventory[1] = new ItemStack(Blocks.planks, 64, 0);
         inv.mainInventory[2] = new ItemStack(Items.fishing_rod);
         inv.mainInventory[3] = new ItemStack(Items.snowball, 32);
-        inv.mainInventory[4] = new ItemStack(Items.golden_apple, 1, 0);
-        inv.armorInventory[0] = new ItemStack(Items.iron_boots);
-        inv.armorInventory[1] = new ItemStack(Items.iron_leggings);
-        inv.armorInventory[2] = new ItemStack(Items.iron_chestplate);
-        inv.armorInventory[3] = new ItemStack(Items.iron_helmet);
+        inv.mainInventory[4] = new ItemStack(Items.golden_apple, 3, 0);
+        inv.armorInventory[0] = new ItemStack(Items.diamond_boots);
+        inv.armorInventory[1] = new ItemStack(Items.diamond_leggings);
+        inv.armorInventory[2] = new ItemStack(Items.diamond_chestplate);
+        inv.armorInventory[3] = new ItemStack(Items.diamond_helmet);
         inv.currentItem = 0;
         p.inventoryContainer.detectAndSendChanges();
+    }
+
+    /** Keep the PvP inventory aside during edit mode (creative), exactly as it was. */
+    private void stashInventory() {
+        InventoryPlayer inv = player.inventory;
+        stashMain = new ItemStack[inv.mainInventory.length];
+        stashArmor = new ItemStack[inv.armorInventory.length];
+        for (int i = 0; i < stashMain.length; i++) stashMain[i] = inv.mainInventory[i] == null ? null : inv.mainInventory[i].copy();
+        for (int i = 0; i < stashArmor.length; i++) stashArmor[i] = inv.armorInventory[i] == null ? null : inv.armorInventory[i].copy();
+        clearInventory(player);
+    }
+
+    private void restoreInventory() {
+        if (stashMain == null) return;
+        InventoryPlayer inv = player.inventory;
+        clearInventory(player);
+        System.arraycopy(stashMain, 0, inv.mainInventory, 0, Math.min(stashMain.length, inv.mainInventory.length));
+        System.arraycopy(stashArmor, 0, inv.armorInventory, 0, Math.min(stashArmor.length, inv.armorInventory.length));
+        stashMain = null;
+        stashArmor = null;
+        player.inventoryContainer.detectAndSendChanges();
     }
 
     static void clearInventory(EntityPlayerMP p) {
@@ -760,8 +832,12 @@ final class OpenMapSession {
 
     private void spawnBot() {
         if (bot != null && !bot.isDead) return;
-        bot = new EntityPvpBot(world, this);
-        bot.giveKit();
+        if (!botKitGiven) {
+            EntityPvpBot.fillKit(botHotbar, botArmor); // once per session; rounds don't refill it
+            botKitGiven = true;
+        }
+        bot = new EntityPvpBot(world, this, botHotbar, botArmor);
+        bot.setHealth(bot.getMaxHealth());
         OpenMapLayout.Spot b = layout.aiSpawn;
         bot.setLocationAndAngles(b.x, b.y, b.z, b.yaw, 0F);
         bot.rotationYawHead = b.yaw;

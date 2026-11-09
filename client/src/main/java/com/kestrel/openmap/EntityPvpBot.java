@@ -47,9 +47,10 @@ public class EntityPvpBot extends EntityLivingBase {
     static final int SNOWBALL = 3;
 
     private OpenMapSession session;
-    final ItemStack[] hotbar = new ItemStack[4];
-    /** boots, leggings, chestplate, helmet (as a player's armor slots). */
-    final ItemStack[] armor = new ItemStack[4];
+    /** Hotbar and armor (boots, leggings, chestplate, helmet). On the server these are the
+     *  session's arrays, so what it uses up stays used up for the whole session. */
+    final ItemStack[] hotbar;
+    final ItemStack[] armor;
     private int selected = SWORD;
     private int selectedTicks;
     /** What the client knows (from equipment packets). */
@@ -62,14 +63,20 @@ public class EntityPvpBot extends EntityLivingBase {
 
     /** Constructor used on the client (rendering only). */
     public EntityPvpBot(World world) {
+        this(world, new ItemStack[4], new ItemStack[4]);
+    }
+
+    private EntityPvpBot(World world, ItemStack[] hotbar, ItemStack[] armor) {
         super(world);
+        this.hotbar = hotbar;
+        this.armor = armor;
         setSize(0.6F, 1.8F);
         setCustomNameTag(NAME);
         setAlwaysRenderNameTag(true);
     }
 
-    EntityPvpBot(World world, OpenMapSession session) {
-        this(world);
+    EntityPvpBot(World world, OpenMapSession session, ItemStack[] hotbar, ItemStack[] armor) {
+        this(world, hotbar, armor);
         this.session = session;
     }
 
@@ -87,18 +94,19 @@ public class EntityPvpBot extends EntityLivingBase {
         return 1.62F;
     }
 
-    /** The match kit: iron armor, iron sword, 64 oak planks, a fishing rod, 32 snowballs. No golden apple. */
-    void giveKit() {
+    /**
+     * The session kit (once per session, kept between rounds): diamond armor,
+     * iron sword, 64 oak planks, a fishing rod, 32 snowballs. Never a golden apple.
+     */
+    static void fillKit(ItemStack[] hotbar, ItemStack[] armor) {
         hotbar[SWORD] = new ItemStack(Items.iron_sword);
         hotbar[PLANKS] = new ItemStack(Blocks.planks, 64, 0);
         hotbar[ROD] = new ItemStack(Items.fishing_rod);
         hotbar[SNOWBALL] = new ItemStack(Items.snowball, 32);
-        armor[0] = new ItemStack(Items.iron_boots);
-        armor[1] = new ItemStack(Items.iron_leggings);
-        armor[2] = new ItemStack(Items.iron_chestplate);
-        armor[3] = new ItemStack(Items.iron_helmet);
-        selected = SWORD;
-        setHealth(getMaxHealth());
+        armor[0] = new ItemStack(Items.diamond_boots);
+        armor[1] = new ItemStack(Items.diamond_leggings);
+        armor[2] = new ItemStack(Items.diamond_chestplate);
+        armor[3] = new ItemStack(Items.diamond_helmet);
     }
 
     int count(int slot) {
@@ -157,8 +165,9 @@ public class EntityPvpBot extends EntityLivingBase {
             swingItem();
             if (canReach(target)) attack(target);
         }
-        // Right click uses the item in hand (not on the tick the slot changed).
-        if (c.use && selectedTicks > 0) {
+        // Right click uses the item in hand. A hotbar key and a click in the same tick work
+        // for a player too (the key is handled first).
+        if (c.use) {
             if (selected == ROD) useRod();
             else if (selected == SNOWBALL) throwSnowball();
         }
@@ -293,7 +302,7 @@ public class EntityPvpBot extends EntityLivingBase {
      */
     private boolean placePlank(int x, int y, int z) {
         ItemStack planks = hotbar[PLANKS];
-        if (selected != PLANKS || planks == null || planks.stackSize <= 0 || selectedTicks <= 0) return false;
+        if (selected != PLANKS || planks == null || planks.stackSize <= 0) return false;
         if (y < 1 || y > 254) return false;
         BlockPos pos = new BlockPos(x, y, z);
         double ex = x + 0.5 - posX;

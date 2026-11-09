@@ -31,7 +31,7 @@ final class OpenMapWorldSetup {
     static final String WORLD_NAME = "Night Open Map PvP";
     static final long SEED = 8_417_220_391L;
     /** Vanilla customized-world options: plains only, more height variation, no caves/lakes/structures. */
-    static final String GENERATOR = "{\"fixedBiome\":1,\"seaLevel\":50,\"biomeScaleOffset\":0.25,\"biomeScaleWeight\":1.5,"
+    static final String GENERATOR = "{\"fixedBiome\":1,\"seaLevel\":50,\"biomeScaleOffset\":0.0,\"biomeScaleWeight\":1.0,"
             + "\"useCaves\":false,\"useDungeons\":false,\"useLavaLakes\":false,\"useWaterLakes\":false,\"useRavines\":false,"
             + "\"useMineShafts\":false,\"useVillages\":false,\"useStrongholds\":false,\"useTemples\":false,"
             + "\"useMonuments\":false,\"useLavaOceans\":false}";
@@ -39,7 +39,7 @@ final class OpenMapWorldSetup {
     static final String MARKER = "night-openmap.json";
     static final int SIZE = 256;
     private static final int LOBBY_HALF = 4;
-    private static final int TREES = 230;
+    private static final int TREES = 120;
 
     private OpenMapWorldSetup() {
     }
@@ -75,6 +75,11 @@ final class OpenMapWorldSetup {
         }
     }
 
+    /** Generated in this session (nothing of the player's in it yet). */
+    static boolean isFresh(WorldServer world) {
+        return world.getTotalWorldTime() < 200;
+    }
+
     static boolean isSetUp(WorldServer world) {
         return new File(world.getSaveHandler().getWorldDirectory(), MARKER).isFile();
     }
@@ -100,9 +105,27 @@ final class OpenMapWorldSetup {
         l.aiSpawn = surface(world, cx + 13, cz + 28, 90F);
         plantTrees(world, l, new Random(SEED));
         world.getWorldInfo().setSpawn(new BlockPos(cx, gy + 1, cz));
-        File marker = new File(world.getSaveHandler().getWorldDirectory(), MARKER);
-        Files.write(marker.toPath(), ("{\"version\":1,\"seed\":" + SEED + "}").getBytes(StandardCharsets.UTF_8));
+        writeMarker(world.getSaveHandler().getWorldDirectory(), 1);
         return l;
+    }
+
+    /** The terrain version recorded in the world folder (1 = as generated, 2 = flattened); 0 if not set up. */
+    static int terrainVersion(File worldDir) {
+        File marker = new File(worldDir, MARKER);
+        if (!marker.isFile()) return 0;
+        try {
+            String s = new String(Files.readAllBytes(marker.toPath()), StandardCharsets.UTF_8);
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"terrain\"\\s*:\\s*(\\d+)").matcher(s);
+            return m.find() ? Integer.parseInt(m.group(1)) : 1;
+        } catch (IOException | RuntimeException e) {
+            return 1;
+        }
+    }
+
+    static void writeMarker(File worldDir, int terrain) throws IOException {
+        File marker = new File(worldDir, MARKER);
+        Files.write(marker.toPath(), ("{\"version\":1,\"seed\":" + SEED + ",\"terrain\":" + terrain + "}")
+                .getBytes(StandardCharsets.UTF_8));
     }
 
     /** A standing spot on the ground at (x, z), clearing a tree trunk if one is in the way. */

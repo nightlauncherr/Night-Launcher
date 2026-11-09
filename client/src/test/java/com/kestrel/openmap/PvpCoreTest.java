@@ -20,6 +20,8 @@ public class PvpCoreTest {
     static final class Blocks implements Terrain {
         final Set<String> solid = new HashSet<String>();
         final Set<String> lava = new HashSet<String>();
+        /** Columns with no ground (a pit down to the void). */
+        final Set<String> holes = new HashSet<String>();
 
         void add(int x, int y, int z) {
             solid.add(x + "," + y + "," + z);
@@ -27,7 +29,8 @@ public class PvpCoreTest {
 
         @Override
         public boolean solid(int x, int y, int z) {
-            return y <= 64 || solid.contains(x + "," + y + "," + z);
+            if (solid.contains(x + "," + y + "," + z)) return true;
+            return y <= 64 && !holes.contains(x + "," + z);
         }
 
         @Override
@@ -187,12 +190,12 @@ public class PvpCoreTest {
             PvpBrain.Controls c = b.tick(me, t);
             me.yaw = c.yaw;
             me.pitch = c.pitch;
-            if (c.use && me.slot == PvpBrain.Slot.ROD) {
+            if (c.use && c.slot == PvpBrain.Slot.ROD) { // a hotbar key and the click can share a tick
                 rodUses++;
                 me.hookOut = !me.hookOut;
                 me.hookAge = 0;
             }
-            if (c.use && me.slot == PvpBrain.Slot.SNOWBALL) {
+            if (c.use && c.slot == PvpBrain.Slot.SNOWBALL) {
                 snowUses++;
                 me.snowballs--;
             }
@@ -220,8 +223,8 @@ public class PvpCoreTest {
     public void towersWhenTheTargetIsUpHighAndNeverWithoutPlanks() {
         PvpBrain b = brain(new Blocks(), 0.7, 5);
         PvpBrain.Self me = self(0.5, 0.5);
-        PvpBrain.Target t = target(2.5, 2.5);
-        t.y = 69; // up on a tower
+        PvpBrain.Target t = target(1.5, 1.5);
+        t.y = 69; // up on a tower right beside it
         boolean placed = false;
         int air = 0;
         for (int i = 0; i < 400 && !placed; i++) {
@@ -242,7 +245,9 @@ public class PvpCoreTest {
             if (c.place) {
                 placed = true;
                 assertEquals(65, c.py); // under its feet
-                assertEquals(PvpBrain.Slot.PLANKS, me.slot);
+                assertEquals(0, c.px);
+                assertEquals(0, c.pz);
+                assertEquals(PvpBrain.Slot.PLANKS, c.slot);
             }
         }
         assertTrue("never built up toward a player above it", placed);
@@ -300,5 +305,134 @@ public class PvpCoreTest {
             }
             assertTrue(clicks <= 100 / 20.0 * 13);
         }
+    }
+
+    /** Run the brain with a crude body: turning, slot and item counts follow its inputs. */
+    private static PvpBrain.Controls step(PvpBrain b, PvpBrain.Self me, PvpBrain.Target t) {
+        PvpBrain.Controls c = b.tick(me, t);
+        me.yaw = c.yaw;
+        me.pitch = c.pitch;
+        me.slot = c.slot;
+        if (c.place) me.planks--;
+        return c;
+    }
+
+    @Test
+    public void buildsStepsTowardAHigherPlayerFromADistance() {
+        PvpBrain b = brain(new Blocks(), 0.7, 11);
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(6.5, 0.5);
+        t.y = 68;
+        PvpBrain.Controls first = null;
+        for (int i = 0; i < 200 && first == null; i++) {
+            PvpBrain.Controls c = step(b, me, t);
+            if (c.place) first = c;
+        }
+        assertNotNull("no steps toward a player 3 up and 6 away", first);
+        assertEquals(PvpBrain.Mode.STAIRS, first.mode);
+        // The column in front, toward the player, at foot level.
+        assertEquals(1, first.px);
+        assertEquals(65, first.py);
+        assertEquals(0, first.pz);
+    }
+
+    @Test
+    public void escapesWhenStuck() {
+        Blocks walls = new Blocks();
+        // Boxed in: two-high walls all around (no way out on foot).
+        for (int d = -1; d <= 1; d++) {
+            for (int y = 65; y <= 66; y++) {
+                walls.add(d, y, -1);
+                walls.add(d, y, 1);
+                walls.add(-1, y, d);
+                walls.add(1, y, d);
+            }
+        }
+        PvpBrain b = brain(walls, 0.7, 12);
+        PvpBrain.Self me = self(0.5, 0.5);
+        me.collided = true;
+        PvpBrain.Target t = target(0.5, 20.5);
+        boolean towered = false;
+        for (int i = 0; i < 120 && !towered; i++) towered = step(b, me, t).mode == PvpBrain.Mode.TOWER;
+        assertTrue("stayed stuck in a box", towered);
+    }
+
+    @Test
+    public void bridgesAGapItCannotWalk() {
+        Blocks b = new Blocks();
+        // A 5-wide pit across the whole way between them.
+        for (int x = 1; x <= 5; x++) for (int z = -60; z <= 60; z++) b.holes.add(x + "," + z);
+        PvpBrain brain = brain(b, 0.7, 13);
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(8.5, 0.5);
+        t.visible = false; // across the gap, behind something: nothing to throw at
+        PvpBrain.Controls first = null;
+        for (int i = 0; i < 200 && first == null; i++) {
+            PvpBrain.Controls c = step(brain, me, t);
+            if (c.place) first = c;
+        }
+        assertNotNull("never bridged the gap", first);
+        assertEquals(PvpBrain.Mode.BRIDGE, first.mode);
+        assertEquals(1, first.px);
+        assertEquals(64, first.py); // against the edge it stands on
+        assertEquals(0, first.pz);
+    }
+
+    @Test
+    public void sometimesSideStepsASnowballComingStraightAtIt() {
+        int dodged = 0;
+        int runs = 40;
+        for (int seed = 0; seed < runs; seed++) {
+            PvpBrain b = brain(new Blocks(), 0.7, 100 + seed);
+            PvpBrain.Self me = self(0.5, 0.5);
+            PvpBrain.Target t = target(0.5, 12.5);
+            t.visible = false; // keeps it chasing (no throws of its own) so strafing is only from the dodge
+            step(b, me, t);
+            boolean side = false;
+            for (int i = 0; i < 12; i++) {
+                // A snowball flying from the player straight at it.
+                b.incoming(0.5, 66, 10.5 - i * 1.4, 0, 0, -1.4);
+                PvpBrain.Controls c = step(b, me, t);
+                if (Math.abs(c.strafe) == 1f) side = true;
+            }
+            if (side) dodged++;
+        }
+        assertTrue("never dodged: " + dodged, dodged > 0);
+        assertTrue("dodged every single time (too perfect): " + dodged, dodged < runs);
+    }
+
+    @Test
+    public void playsBelowTheSetDifficultyButReactsQuickly() {
+        PvpBrain b = brain(new Blocks(), 1.0, 14);
+        // Eased skill 0.88: reaction 4 - 3 * 0.88 = 1.36 -> 1 tick.
+        assertEquals(1, b.reaction());
+        PvpBrain mid = brain(new Blocks(), 0.71, 15);
+        assertTrue(mid.reaction() <= new SumoDifficulty(0.71).reactionTicks());
+    }
+
+    @Test
+    public void neverPlacesMoreThanItHas() {
+        PvpBrain b = brain(new Blocks(), 0.9, 16);
+        PvpBrain.Self me = self(0.5, 0.5);
+        me.planks = 3;
+        PvpBrain.Target t = target(1.5, 1.5);
+        t.y = 70;
+        int placed = 0;
+        int air = 0;
+        for (int i = 0; i < 600; i++) {
+            PvpBrain.Controls c = step(b, me, t);
+            if (c.place) placed++;
+            if (air > 0 && --air == 0) {
+                me.onGround = true;
+                me.y = 65;
+            }
+            if (c.jump && me.onGround) {
+                me.onGround = false;
+                me.y = 66.2;
+                air = 6;
+            }
+            assertTrue(me.planks >= 0);
+        }
+        assertTrue(placed <= 3);
     }
 }

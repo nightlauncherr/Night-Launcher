@@ -43,6 +43,11 @@ final class OpenMapWorlds {
         if (dir.isDirectory()) {
             WorldInfo info = mc.getSaveLoader().getWorldInfo(OpenMapWorldSetup.WORLD_FOLDER);
             if (info != null) {
+                int v = OpenMapWorldSetup.terrainVersion(dir);
+                if (v > 0 && v < OpenMapTerrain.VERSION && !backup(dir, "before-flatten")) {
+                    KestrelMod.LOG.error("[Kestrel] couldn't back up the Open Map world; not opening it (nothing was changed)");
+                    return;
+                }
                 KestrelMod.LOG.info("[Kestrel] opening the Open Map PvP world");
                 FMLClientHandler.instance().tryLoadExistingWorld(new net.minecraft.client.gui.GuiSelectWorld(parent),
                         OpenMapWorldSetup.WORLD_FOLDER, info.getWorldName());
@@ -60,5 +65,36 @@ final class OpenMapWorlds {
                 WorldType.CUSTOMIZED);
         settings.setWorldName(OpenMapWorldSetup.GENERATOR); // customized-world options
         mc.launchIntegratedServer(OpenMapWorldSetup.WORLD_FOLDER, OpenMapWorldSetup.WORLD_NAME, settings);
+    }
+
+    /** Copy the whole world folder next to it (never moved or deleted), before a one-time change. */
+    static boolean backup(File dir, String reason) {
+        final java.nio.file.Path src = dir.toPath();
+        final java.nio.file.Path dst = new File(dir.getParentFile(),
+                OpenMapWorldSetup.WORLD_FOLDER + "-" + reason + "-" + System.currentTimeMillis()).toPath();
+        try {
+            java.nio.file.Files.walkFileTree(src, new java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                @Override
+                public java.nio.file.FileVisitResult preVisitDirectory(java.nio.file.Path d, java.nio.file.attribute.BasicFileAttributes a)
+                        throws java.io.IOException {
+                    java.nio.file.Files.createDirectories(dst.resolve(src.relativize(d)));
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public java.nio.file.FileVisitResult visitFile(java.nio.file.Path f, java.nio.file.attribute.BasicFileAttributes a)
+                        throws java.io.IOException {
+                    if (!f.getFileName().toString().equals("session.lock")) {
+                        java.nio.file.Files.copy(f, dst.resolve(src.relativize(f)));
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+            });
+            KestrelMod.LOG.info("[Kestrel] backed up the Open Map world to {}", dst.getFileName());
+            return true;
+        } catch (java.io.IOException e) {
+            KestrelMod.LOG.error("[Kestrel] Open Map world backup failed", e);
+            return false;
+        }
     }
 }

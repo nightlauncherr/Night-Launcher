@@ -20,12 +20,18 @@ public final class PvpBrain {
     public enum Slot { SWORD, PLANKS, ROD, SNOWBALL }
 
     /** The current activity. */
-    public enum Mode { CHASE, MELEE, RETREAT, ROD, SNOWBALL, TOWER, WALL }
+    public enum Mode { CHASE, MELEE, RETREAT, ROD, SNOWBALL, TOWER, WALL, STAIRS, BRIDGE }
 
     public static final double REACH = 3.0;
     /** Survival block reach from the eyes. */
     public static final double PLACE_REACH = 4.5;
     public static final double EYE = 1.62;
+    /**
+     * The Open Map opponent plays a little below the difficulty it is set to
+     * (players found it too sharp); it reacts faster than before but spaces,
+     * dodges and strafes less perfectly, and makes the odd mistake.
+     */
+    static final double EASE = 0.88;
 
     /** What the opponent knows about itself. */
     public static final class Self {
@@ -99,8 +105,33 @@ public final class PvpBrain {
     private int snowBurst;
     private int towerBase;
     private int towerLeft;
-    private int wallLeft;
-    private int wallX, wallZ;
+    /** Wall cells still to place: x, y, z triples. */
+    private final int[] wallCells = new int[12];
+    private int wallCount;
+    private boolean retreatAfterWall;
+    private int stairBackoff;
+    private double lastStepY;
+    private int placeCooldown;
+    private int wallIndex;
+    private int stairsLeft;
+    private int stairDX, stairDZ;
+    private int bridgeLeft;
+    private boolean snowAfterTower;
+    // Reacting.
+    private int recoverTicks;
+    private int dodgeTicks;
+    private int dodgeCooldown;
+    private double dodgeAwayX, dodgeAwayZ;
+    private double lastMeX, lastMeY, lastMeZ;
+    private float lastMeYaw;
+    private double lastDist = 99;
+    // Imperfections.
+    private int mistakeTimer;
+    private int mistakeTicks;
+    private int mistakeKind;
+    private double rangeDrift;
+    private double sideBias = 0.5;
+    private boolean sidestepRush;
     private int hookWait;
     private boolean rodCast;
     private int stuckTicks;
@@ -122,7 +153,7 @@ public final class PvpBrain {
     private double jitterBuild;
 
     public PvpBrain(SumoDifficulty diff, PvpProfile profile, Terrain terrain, Random rng) {
-        this.diff = diff;
+        this.diff = eased(diff);
         this.profile = profile;
         this.terrain = terrain;
         this.rng = rng;
@@ -131,7 +162,11 @@ public final class PvpBrain {
     }
 
     public void setDifficulty(SumoDifficulty d) {
-        diff = d;
+        diff = eased(d);
+    }
+
+    private static SumoDifficulty eased(SumoDifficulty d) {
+        return new SumoDifficulty(d.skill() * EASE);
     }
 
     public void setPlaystyle(Playstyle s) {
@@ -153,10 +188,23 @@ public final class PvpBrain {
         wtapTicks = 0;
         rodCooldown = 30 + rng.nextInt(40);
         snowCooldown = 30 + rng.nextInt(40);
-        buildCooldown = 60;
+        buildCooldown = 30;
         snowBurst = 0;
         towerLeft = 0;
-        wallLeft = 0;
+        wallCount = 0;
+        wallIndex = 0;
+        stairsLeft = 0;
+        bridgeLeft = 0;
+        snowAfterTower = false;
+        recoverTicks = 0;
+        dodgeTicks = 0;
+        dodgeCooldown = 0;
+        mistakeTimer = 60 + rng.nextInt(80);
+        mistakeTicks = 0;
+        rangeDrift = 0;
+        // A habit for the round (one side more often), which a player can read and use.
+        sideBias = rng.nextBoolean() ? 0.7 : 0.3;
+        sidestepRush = rng.nextDouble() < 0.45 + 0.35 * diff.skill();
         rodCast = false;
         stuckTicks = 0;
         targetHealth = 20;
@@ -183,8 +231,45 @@ public final class PvpBrain {
 
     /** It got hit by the player (sword). */
     public void onHitTaken() {
-        if (mode == Mode.TOWER || mode == Mode.WALL) return;
+        // React now rather than at the next decision: re-plan, and stop a slow item use up close.
+        recoverTicks = 6;
+        decideTimer = 0;
+        replanTimer = 0;
+        if ((mode == Mode.SNOWBALL || (mode == Mode.ROD && !rodCast)) && lastDist < 5) setMode(Mode.CHASE);
+        if (mode == Mode.TOWER || mode == Mode.WALL || mode == Mode.STAIRS || mode == Mode.BRIDGE) return;
         if (rng.nextDouble() < 0.3) strafeDir = -strafeDir;
+    }
+
+    /**
+     * A projectile the player threw (snowball or rod hook), as it flies. If it
+     * is heading for the opponent, it may side-step it (not always, and late
+     * by its reaction time, like a player).
+     */
+    public void incoming(double px, double py, double pz, double vx, double vy, double vz) {
+        if (dodgeTicks > 0 || dodgeCooldown > 0) return;
+        double rx = lastMeX - px;
+        double rz = lastMeZ - pz;
+        double v2 = vx * vx + vz * vz;
+        if (v2 < 0.04) return;
+        double tHit = (rx * vx + rz * vz) / v2; // ticks to the closest point
+        if (tHit < 1 || tHit > 18) return;
+        double cx = px + vx * tHit - lastMeX;
+        double cz = pz + vz * tHit - lastMeZ;
+        if (cx * cx + cz * cz > 1.2 * 1.2) return; // passes wide
+        dodgeCooldown = 12;
+        if (rng.nextDouble() > 0.2 + 0.4 * diff.skill()) return; // didn't see it in time
+        // Step away from the line it travels on.
+        double ax = -cx;
+        double az = -cz;
+        if (ax * ax + az * az < 0.01) {
+            double s = rng.nextBoolean() ? 1 : -1;
+            ax = -vz * s;
+            az = vx * s;
+        }
+        dodgeAwayX = ax;
+        dodgeAwayZ = az;
+        // Reaction delay before the step, then a few ticks of it.
+        dodgeTicks = Math.min((int) tHit, reaction() + 5);
     }
 
     /** The player ate the golden apple (visible: eating, then absorption hearts aren't visible but the bite is). */
@@ -195,6 +280,10 @@ public final class PvpBrain {
     // ---- The decision.
 
     public Controls tick(Self me, Target now) {
+        lastMeX = me.x;
+        lastMeY = me.y;
+        lastMeZ = me.z;
+        lastMeYaw = me.yaw;
         Target t = delayed(now);
         trackVelocity(t);
         regen();
@@ -211,16 +300,24 @@ public final class PvpBrain {
         if (rodCooldown > 0) rodCooldown--;
         if (snowCooldown > 0) snowCooldown--;
         if (buildCooldown > 0) buildCooldown--;
+        if (dodgeCooldown > 0) dodgeCooldown--;
+        if (placeCooldown > 0) placeCooldown--;
         modeTicks++;
+        updateImperfections();
 
         double dx = t.x - me.x;
         double dz = t.z - me.z;
         double dist = Math.sqrt(dx * dx + dz * dz);
         double dy = t.y - me.y;
+        lastDist = dist;
         trackStuck(me);
 
+        if (clutch(me, c)) {
+            c.mode = mode;
+            return c;
+        }
         if (--decideTimer <= 0 || mode == Mode.CHASE || mode == Mode.MELEE) {
-            if (decideTimer <= 0) decideTimer = 6 + rng.nextInt(5);
+            if (decideTimer <= 0) decideTimer = 2 + rng.nextInt(3);
             choose(me, t, dist, dy);
         }
         switch (mode) {
@@ -229,6 +326,12 @@ public final class PvpBrain {
                 break;
             case WALL:
                 wall(me, t, c);
+                break;
+            case STAIRS:
+                stairs(me, t, c);
+                break;
+            case BRIDGE:
+                bridge(me, t, c);
                 break;
             case ROD:
                 rod(me, t, dist, c);
@@ -246,8 +349,84 @@ public final class PvpBrain {
                 chase(me, t, dist, c);
                 break;
         }
+        applyDodge(c);
+        if (recoverTicks > 0) recoverTicks--;
         c.mode = mode;
         return c;
+    }
+
+    private boolean building() {
+        return mode == Mode.TOWER || mode == Mode.WALL || mode == Mode.STAIRS || mode == Mode.BRIDGE;
+    }
+
+    /** Side-step a projectile: move away from its line, whatever else it's doing. */
+    private void applyDodge(Controls c) {
+        if (dodgeTicks <= 0) return;
+        dodgeTicks--;
+        if (building() || dodgeTicks > 4) return; // still reacting (or busy placing)
+        // Strafe direction in world space for this look direction (vanilla moveFlying).
+        double yr = Math.toRadians(c.yaw);
+        double left = dodgeAwayX * Math.cos(yr) + dodgeAwayZ * Math.sin(yr);
+        c.strafe = left >= 0 ? 1f : -1f;
+    }
+
+    /** Mistake windows now and then, and a slowly wandering preferred distance. */
+    private void updateImperfections() {
+        rangeDrift += (rng.nextDouble() - 0.5) * 0.06;
+        rangeDrift = Math.max(-0.3, Math.min(0.3, rangeDrift));
+        if (mistakeTicks > 0) {
+            mistakeTicks--;
+            return;
+        }
+        if (--mistakeTimer <= 0) {
+            mistakeTimer = 70 + rng.nextInt(80);
+            if (rng.nextDouble() < 0.65 - 0.3 * diff.skill()) {
+                mistakeTicks = 6 + rng.nextInt(8);
+                mistakeKind = rng.nextInt(3); // 0 overcommit, 1 sloppy aim, 2 slow to turn
+            }
+        }
+    }
+
+    private boolean mistake(int kind) {
+        return mistakeTicks > 0 && mistakeKind == kind;
+    }
+
+    private float turnRate() {
+        return mistake(2) ? diff.maxTurnDeg() * 0.45f : diff.maxTurnDeg();
+    }
+
+    /**
+     * Knocked off something high: put a plank under the feet on the way down,
+     * if there's a face to place it against (as a player "clutches").
+     */
+    private boolean clutch(Self me, Controls c) {
+        if (me.onGround || me.my > -0.15 || me.planks <= 0 || building()) return false;
+        int bx = floor(me.x);
+        int bz = floor(me.z);
+        int fy = floor(me.y);
+        int drop = 0;
+        while (drop < 6 && terrain.open(bx, fy - 1 - drop, bz)) drop++;
+        if (drop < 4) return false; // a short fall: just land
+        int y = fy - 1;
+        boolean support = false;
+        int[][] faces = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}};
+        for (int[] f : faces) {
+            if (terrain.solid(bx + f[0], y + f[1], bz + f[2])) {
+                support = true;
+                break;
+            }
+        }
+        if (!support) return false;
+        c.slot = Slot.PLANKS;
+        c.yaw = me.yaw;
+        c.pitch = approach(me.pitch, 90f, turnRate());
+        if (c.pitch > 45f) {
+            c.place = true;
+            c.px = bx;
+            c.py = y;
+            c.pz = bz;
+        }
+        return true;
     }
 
     private void setMode(Mode m) {
@@ -259,22 +438,47 @@ public final class PvpBrain {
 
     private void choose(Self me, Target t, double dist, double dy) {
         // Multi-tick actions finish (or time out) on their own.
-        if (mode == Mode.TOWER || mode == Mode.WALL || mode == Mode.ROD || mode == Mode.SNOWBALL) return;
+        if (building() || mode == Mode.ROD || mode == Mode.SNOWBALL) return;
         double adapt = diff.adaptWeight();
         boolean low = me.health <= retreatHealth() && targetHealth > me.health + 2;
         boolean recovered = me.health >= 14 || targetHealth <= me.health;
+        boolean canBuild = me.planks >= 2 && buildCooldown == 0 && me.onGround;
 
-        // Stuck against a wall, or the player is up high: build up.
-        if (me.planks >= 2 && buildCooldown == 0 && me.onGround
-                && (stuckTicks > 20 || (dy >= 2.5 && dist < 6 && t.visible))) {
-            startTower(me, dy >= 2.5 ? (int) Math.min(3, Math.ceil(dy)) : 1);
+        // The player is up high: steps up to them from a distance, a pillar right beside them.
+        if (canBuild && dy >= 2.5 && dist < 9 && t.visible) {
+            int h = (int) Math.min(4, Math.ceil(dy));
+            if (dist > 2.6 && startStairs(me, t, h)) return;
+            startTower(me, Math.min(3, h), dist > 2.6);
+            return;
+        }
+        // Stuck (a wall, a pit, a box built around it): get up and out.
+        if (canBuild && stuckTicks > 12 && me.collided) {
+            startTower(me, 1, false);
+            return;
+        }
+        // No way across on foot (a gap or a drop): bridge toward them.
+        if (me.planks >= 1 && buildCooldown == 0 && me.onGround && mode == Mode.CHASE && path.isEmpty()
+                && dist > 3 && gapAhead(me, t)) {
+            startBridge(me, t);
+            return;
+        }
+        // Losing a close trade: get up out of reach (and throw down), or wall them off.
+        if (canBuild && mode == Mode.MELEE && dist < 4 && me.health <= 12 && me.health < targetHealth - 3
+                && rng.nextDouble() < 0.05 * buildMul() * jitterBuild) {
+            if (rng.nextBoolean()) startTower(me, 2, me.snowballs > 0);
+            else {
+                startWall(me, t);
+                retreatAfterWall = true;
+            }
             return;
         }
         if (mode == Mode.RETREAT && !recovered && dist < 18) {
             // Under pressure: block them off or get up out of reach.
-            if (me.planks >= 2 && buildCooldown == 0 && dist < 5.5 && rng.nextDouble() < 0.5 * buildMul() * jitterBuild) {
-                if (rng.nextBoolean() && me.onGround && dist > 2.2) startWall(me, t);
-                else if (me.onGround) startTower(me, 2);
+            if (canBuild && dist < 6.5 && rng.nextDouble() < 0.6 * buildMul() * jitterBuild) {
+                if (rng.nextBoolean() && dist > 2.2) {
+                    startWall(me, t);
+                    retreatAfterWall = true;
+                } else startTower(me, 2, me.snowballs > 0);
                 return;
             }
             if (me.snowballs > 0 && snowCooldown == 0 && dist > 5 && t.visible) {
@@ -314,9 +518,9 @@ public final class PvpBrain {
         int fx = floor(me.x);
         int fy = (int) Math.round(me.y);
         int fz = floor(me.z);
-        boolean moved = Double.isNaN(planGoalX) || Math.abs(planGoalX - t.x) + Math.abs(planGoalZ - t.z) > 3;
+        boolean moved = Double.isNaN(planGoalX) || Math.abs(planGoalX - t.x) + Math.abs(planGoalZ - t.z) > 2;
         if (--replanTimer <= 0 || moved || pathIndex >= path.size()) {
-            replanTimer = 10;
+            replanTimer = 6;
             PathFinder.Node start = paths.ground(fx, fy, fz);
             PathFinder.Node goal = paths.ground(floor(t.x), (int) Math.round(t.y), floor(t.z));
             if (goal == null) goal = new PathFinder.Node(floor(t.x), (int) Math.round(t.y), floor(t.z));
@@ -342,7 +546,7 @@ public final class PvpBrain {
             break;
         }
         float moveYaw = (float) yawTo(me.x, me.z, gx, gz);
-        c.yaw = turnToward(me.yaw, moveYaw, diff.maxTurnDeg());
+        c.yaw = turnToward(me.yaw, moveYaw, turnRate());
         c.pitch = approach(me.pitch, 5f, 10f);
         steer(c, moveYaw, 1f);
         c.sprint = true;
@@ -352,11 +556,7 @@ public final class PvpBrain {
     // ---- Close combat.
 
     private void melee(Self me, Target t, double dist, Controls c) {
-        c.slot = Slot.SWORD;
-        if (me.slot != Slot.SWORD) {
-            aimAt(me, t, c, true);
-            return; // switching this tick
-        }
+        c.slot = Slot.SWORD; // switching takes effect this tick, as a hotbar key does
         aimAt(me, t, c, true);
         double range = preferredRange();
         float toTarget = (float) yawTo(me.x, me.z, t.x, t.z);
@@ -364,19 +564,21 @@ public final class PvpBrain {
         if (wtapTicks > 0) {
             wtapTicks--;
             forward = 0f; // release W: the next hit is a sprint hit again
-        } else if (dist > range + 0.5) {
-            forward = 1f;
+        } else if (dist > range + 0.5 || mistake(0) || (recoverTicks > 0 && dist > range)) {
+            forward = 1f; // close in (or, overcommitting, walk right into them)
         } else if (dist < range - 0.7) {
             forward = -0.4f;
         } else {
             forward = 0.8f + (float) rng.nextDouble() * 0.2f;
         }
         // Don't walk straight into a sprinting player facing us: side-step first.
-        boolean theyRush = t.sprinting && facing(t, me) < 25 && dist > 3.1 && dist < 4.6;
+        boolean theyRush = sidestepRush && t.sprinting && facing(t, me) < 25 && dist > 3.1 && dist < 4.6;
         if (--strafeTimer <= 0) {
-            strafeTimer = (int) (strafeTicks() * (0.6 + rng.nextDouble() * 0.8));
-            double sameSide = 0.5 + (profile.strafeLeft - 0.5) * diff.adaptWeight();
+            // Fairly regular switches with a favourite side: readable, and so counterable.
+            strafeTimer = (int) (strafeTicks() * (0.85 + rng.nextDouble() * 0.3));
+            double sameSide = 0.5 * sideBias + 0.5 * (0.5 + (profile.strafeLeft - 0.5) * diff.adaptWeight());
             strafeDir = rng.nextDouble() < sameSide ? 1 : -1;
+            sidestepRush = rng.nextDouble() < 0.45 + 0.35 * diff.skill();
         }
         float strafe = strafeDir * (theyRush ? 1f : 0.7f);
         // Forward/strafe are relative to the look direction; while still turning onto
@@ -398,7 +600,7 @@ public final class PvpBrain {
         boolean falling = !me.onGround && me.my < 0 && me.fallDistance > 0;
         int window = diff.skill() > 0.6 ? 1 : 2;
         if (dist <= REACH + 0.35 && clickCooldown == 0 && aimError(me, t) < 30
-                && (t.hurtTime <= window || falling)) {
+                && (t.hurtTime <= window || falling || mistake(1))) {
             c.attack = true;
             clickCooldown = clickGap();
         } else if (dist <= REACH + 1.5 && clickCooldown == 0 && rng.nextDouble() < 0.3) {
@@ -418,7 +620,7 @@ public final class PvpBrain {
         double ax = me.x - (t.x - me.x) * 4;
         double az = me.z - (t.z - me.z) * 4;
         float away = (float) yawTo(me.x, me.z, ax, az);
-        c.yaw = turnToward(me.yaw, away, diff.maxTurnDeg());
+        c.yaw = turnToward(me.yaw, away, turnRate());
         c.pitch = approach(me.pitch, 0f, 10f);
         steer(c, away, 1f);
         c.sprint = true;
@@ -438,7 +640,7 @@ public final class PvpBrain {
         c.slot = Slot.ROD;
         if (!rodCast) {
             Ballistics.Shot shot = aimProjectile(me, t, Ballistics.Kind.HOOK, c);
-            if (me.slot == Slot.ROD && shot != null && Math.abs(wrap(c.yaw - me.yaw)) < 6 && !me.hookOut) {
+            if (shot != null && Math.abs(wrap(c.yaw - me.yaw)) < 6 && !me.hookOut) {
                 c.use = true; // cast
                 rodCast = true;
             }
@@ -483,13 +685,13 @@ public final class PvpBrain {
         c.slot = Slot.SNOWBALL;
         moveWhileUsing(me, t, dist, c);
         if (me.snowballs <= 0 || snowBurst <= 0 || modeTicks > 40 || dist < 3.2) {
-            snowCooldown = 30 + rng.nextInt(50);
+            snowCooldown = 25 + rng.nextInt(45);
             setMode(Mode.CHASE);
             c.slot = Slot.SWORD;
             return;
         }
         Ballistics.Shot shot = aimProjectile(me, t, Ballistics.Kind.SNOWBALL, c);
-        if (me.slot == Slot.SNOWBALL && shot != null && clickCooldown == 0 && Math.abs(wrap(c.yaw - me.yaw)) < 5) {
+        if (shot != null && clickCooldown == 0 && Math.abs(wrap(c.yaw - me.yaw)) < 5) {
             c.use = true;
             snowBurst--;
             clickCooldown = 3 + rng.nextInt(3); // a fast human right-click rate
@@ -506,13 +708,14 @@ public final class PvpBrain {
         if (me.onGround && me.collided) c.jump = true;
     }
 
-    // ---- Building with planks.
+    // ---- Building with planks (always through the entity's survival placement rules).
 
-    private void startTower(Self me, int height) {
+    private void startTower(Self me, int height, boolean snowAfter) {
         setMode(Mode.TOWER);
         towerBase = (int) Math.floor(me.y + 0.01);
         towerLeft = Math.max(1, height);
-        buildCooldown = 100;
+        snowAfterTower = snowAfter;
+        buildCooldown = 25 + rng.nextInt(20);
         stuckTicks = 0;
     }
 
@@ -520,25 +723,21 @@ public final class PvpBrain {
     private void tower(Self me, Target t, Controls c) {
         c.slot = Slot.PLANKS;
         c.yaw = me.yaw;
-        c.pitch = approach(me.pitch, 90f, diff.maxTurnDeg());
+        c.pitch = approach(me.pitch, 90f, turnRate());
         int bx = floor(me.x);
         int bz = floor(me.z);
         boolean headroom = terrain.open(bx, towerBase + 2, bz) && terrain.open(bx, towerBase + 3, bz);
-        if (me.planks <= 0 || towerLeft <= 0 || modeTicks > 60 || !headroom) {
-            setMode(Mode.CHASE);
-            c.slot = Slot.SWORD;
+        if (me.planks <= 0 || towerLeft <= 0 || modeTicks > 20 + 20 * Math.max(1, towerLeft) || !headroom) {
+            finishTower(me, t, c);
             return;
         }
-        if (me.slot != Slot.PLANKS || me.pitch < 70) return;
+        if (me.pitch < 70) return;
         if (me.onGround) {
             if (me.y >= towerBase + 0.99) {
                 // Landed on the new block.
                 towerBase = (int) Math.floor(me.y + 0.01);
-                towerLeft--;
-                if (towerLeft <= 0) {
-                    setMode(t.visible && PathFinder.horizontal(new PathFinder.Node(bx, 0, bz),
-                            new PathFinder.Node(floor(t.x), 0, floor(t.z))) < 6 ? Mode.MELEE : Mode.CHASE);
-                    c.slot = Slot.SWORD;
+                if (--towerLeft <= 0) {
+                    finishTower(me, t, c);
                     return;
                 }
             }
@@ -551,50 +750,227 @@ public final class PvpBrain {
         }
     }
 
-    private void startWall(Self me, Target t) {
-        setMode(Mode.WALL);
-        double ang = Math.atan2(t.z - me.z, t.x - me.x);
-        wallX = floor(me.x) + (int) Math.round(Math.cos(ang));
-        wallZ = floor(me.z) + (int) Math.round(Math.sin(ang));
-        towerBase = (int) Math.floor(me.y + 0.01);
-        wallLeft = 2;
-        buildCooldown = 80;
+    /** Up on the pillar: throw down at them if that was the idea, otherwise back to the fight. */
+    private void finishTower(Self me, Target t, Controls c) {
+        double dx = t.x - me.x;
+        double dz = t.z - me.z;
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        if (snowAfterTower && t.visible && me.snowballs > 0 && dist > 3.2 && dist < 20) {
+            startSnowball(2 + rng.nextInt(2));
+        } else {
+            setMode(t.visible && dist < 6 ? Mode.MELEE : Mode.CHASE);
+        }
+        snowAfterTower = false;
+        c.slot = Slot.SWORD;
     }
 
-    /** Two planks stacked between it and the player: a quick barrier. */
+    /** A 3-wide barrier toward the player (two high in the middle), placed in a few quick clicks. */
+    private void startWall(Self me, Target t) {
+        setMode(Mode.WALL);
+        int[] d = axisToward(me, t);
+        int bx = floor(me.x);
+        int bz = floor(me.z);
+        int y = (int) Math.floor(me.y + 0.01);
+        int cx = bx + d[0];
+        int cz = bz + d[1];
+        int px = -d[1];
+        int pz = d[0];
+        wallCount = 0;
+        addWallCell(cx, y, cz);
+        addWallCell(cx, y + 1, cz);
+        addWallCell(cx + px, y, cz + pz);
+        addWallCell(cx - px, y, cz - pz);
+        wallIndex = 0;
+        buildCooldown = 30 + rng.nextInt(15);
+    }
+
+    private void addWallCell(int x, int y, int z) {
+        wallCells[wallCount * 3] = x;
+        wallCells[wallCount * 3 + 1] = y;
+        wallCells[wallCount * 3 + 2] = z;
+        wallCount++;
+    }
+
     private void wall(Self me, Target t, Controls c) {
         c.slot = Slot.PLANKS;
-        if (me.planks <= 0 || wallLeft <= 0 || modeTicks > 30) {
-            setMode(Mode.RETREAT);
+        c.forward = 0;
+        while (wallIndex < wallCount) {
+            int x = wallCells[wallIndex * 3];
+            int y = wallCells[wallIndex * 3 + 1];
+            int z = wallCells[wallIndex * 3 + 2];
+            if (!terrain.open(x, y, z) || !supported(x, y, z)) {
+                wallIndex++; // already blocked, or nothing to place it against
+                continue;
+            }
+            break;
+        }
+        if (me.planks <= 0 || wallIndex >= wallCount || modeTicks > 40) {
+            setMode(retreatAfterWall ? Mode.RETREAT : Mode.MELEE);
+            retreatAfterWall = false;
             c.slot = Slot.SWORD;
             return;
         }
-        int y = towerBase + (2 - wallLeft);
-        if (!terrain.open(wallX, y, wallZ)) {
-            wallLeft--; // already blocked there
+        int i = wallIndex * 3;
+        if (placeAt(me, c, wallCells[i], wallCells[i + 1], wallCells[i + 2])) wallIndex++;
+    }
+
+    /** Steps up toward a player standing higher: fill the column ahead, step onto it, repeat. */
+    private boolean startStairs(Self me, Target t, int height) {
+        int[] d = axisToward(me, t);
+        int nx = floor(me.x) + d[0];
+        int nz = floor(me.z) + d[1];
+        int base = (int) Math.floor(me.y + 0.01);
+        if (!terrain.open(nx, base + 1, nz) || !terrain.open(nx, base + 2, nz)) return false;
+        setMode(Mode.STAIRS);
+        stairDX = d[0];
+        stairDZ = d[1];
+        stairsLeft = height;
+        stairBackoff = 0;
+        lastStepY = Math.floor(me.y + 0.01);
+        buildCooldown = 25 + rng.nextInt(20);
+        return true;
+    }
+
+    private void stairs(Self me, Target t, Controls c) {
+        c.slot = Slot.PLANKS;
+        if (me.planks <= 0 || stairsLeft <= 0 || modeTicks > 30 + 30 * stairsLeft || t.y - me.y < 0.9) {
+            setMode(t.visible ? Mode.MELEE : Mode.CHASE);
+            c.slot = Slot.SWORD;
             return;
         }
-        // Look at the spot (the target of a right click).
-        double ex = wallX + 0.5 - me.x;
-        double ey = y + 0.5 - (me.y + EYE);
-        double ez = wallZ + 0.5 - me.z;
-        float yaw = (float) yawTo(me.x, me.z, wallX + 0.5, wallZ + 0.5);
-        float pitch = (float) -Math.toDegrees(Math.atan2(ey, Math.sqrt(ex * ex + ez * ez)));
-        c.yaw = turnToward(me.yaw, yaw, diff.maxTurnDeg());
-        c.pitch = approach(me.pitch, pitch, diff.maxTurnDeg());
-        c.forward = 0;
-        if (me.slot == Slot.PLANKS && Math.abs(wrap(c.yaw - yaw)) < 15 && Math.abs(c.pitch - pitch) < 15) {
-            c.place = true;
-            c.px = wallX;
-            c.py = y;
-            c.pz = wallZ;
-            wallLeft--;
+        if (stairBackoff > 0) {
+            // Too close to the spot (the block would go into itself): step back a little.
+            stairBackoff--;
+            c.yaw = turnToward(me.yaw, stairYaw(), turnRate());
+            c.forward = -0.4f;
+            return;
         }
+        int bx = floor(me.x);
+        int bz = floor(me.z);
+        int base = (int) Math.floor(me.y + 0.01);
+        int nx = bx + stairDX;
+        int nz = bz + stairDZ;
+        if (!terrain.open(nx, base + 1, nz) || !terrain.open(nx, base + 2, nz)) {
+            setMode(Mode.CHASE); // no headroom on that side
+            c.slot = Slot.SWORD;
+            return;
+        }
+        if (me.onGround && terrain.open(nx, base, nz)) {
+            // Fill the next column up to our feet, from the bottom (at most two blocks).
+            int y = base;
+            while (y > base - 2 && terrain.open(nx, y - 1, nz)) y--;
+            if (!supported(nx, y, nz)) {
+                setMode(Mode.CHASE);
+                c.slot = Slot.SWORD;
+                return;
+            }
+            c.forward = 0;
+            placeAt(me, c, nx, y, nz);
+            return;
+        }
+        // The step is there: jump onto it.
+        float yaw = stairYaw();
+        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.pitch = approach(me.pitch, 20f, turnRate());
+        steer(c, yaw, 1f);
+        if (me.onGround) c.jump = true;
+        if (me.onGround && me.y > lastStepY + 0.9) {
+            lastStepY = me.y;
+            stairsLeft--;
+        }
+    }
+
+    private float stairYaw() {
+        return (float) yawTo(0, 0, stairDX, stairDZ);
+    }
+
+    private void startBridge(Self me, Target t) {
+        setMode(Mode.BRIDGE);
+        int[] d = axisToward(me, t);
+        stairDX = d[0];
+        stairDZ = d[1];
+        bridgeLeft = 8;
+        buildCooldown = 25 + rng.nextInt(15);
+    }
+
+    /** Across a gap or a drop: a plank against the edge in front, walk onto it, repeat. */
+    private void bridge(Self me, Target t, Controls c) {
+        c.slot = Slot.PLANKS;
+        int bx = floor(me.x);
+        int bz = floor(me.z);
+        int base = (int) Math.floor(me.y + 0.01);
+        int nx = bx + stairDX;
+        int nz = bz + stairDZ;
+        boolean done = me.planks <= 0 || bridgeLeft <= 0 || modeTicks > 100 || !me.onGround && me.my < -0.3;
+        if (done || terrain.solid(nx, base - 1, nz) && modeTicks > 0 && !terrain.open(nx, base - 1, nz) && bridgeLeft < 8) {
+            setMode(Mode.CHASE);
+            c.slot = Slot.SWORD;
+            return;
+        }
+        if (terrain.open(nx, base - 1, nz)) {
+            c.forward = 0;
+            if (placeAt(me, c, nx, base - 1, nz)) bridgeLeft--;
+            return;
+        }
+        // Walk onto the new plank (slowly, no sprint).
+        float yaw = stairYaw();
+        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.pitch = approach(me.pitch, 60f, turnRate());
+        steer(c, yaw, 0.6f);
+    }
+
+    /** Can't get there on foot: the ground ahead toward them drops away by 3 or more. */
+    private boolean gapAhead(Self me, Target t) {
+        int[] d = axisToward(me, t);
+        int nx = floor(me.x) + d[0];
+        int nz = floor(me.z) + d[1];
+        int base = (int) Math.floor(me.y + 0.01);
+        if (!terrain.open(nx, base, nz) || !terrain.open(nx, base + 1, nz)) return false;
+        for (int k = 1; k <= 3; k++) if (!terrain.open(nx, base - k, nz)) return false;
+        return terrain.solid(floor(me.x), base - 1, floor(me.z));
+    }
+
+    /** One of the four directions, the one closest to the way to the player. */
+    private static int[] axisToward(Self me, Target t) {
+        double dx = t.x - me.x;
+        double dz = t.z - me.z;
+        if (Math.abs(dx) >= Math.abs(dz)) return new int[]{dx >= 0 ? 1 : -1, 0};
+        return new int[]{0, dz >= 0 ? 1 : -1};
+    }
+
+    /** A face to place against (a solid neighbour), as the vanilla rule needs. */
+    private boolean supported(int x, int y, int z) {
+        return terrain.solid(x + 1, y, z) || terrain.solid(x - 1, y, z) || terrain.solid(x, y + 1, z)
+                || terrain.solid(x, y - 1, z) || terrain.solid(x, y, z + 1) || terrain.solid(x, y, z - 1);
+    }
+
+    /**
+     * Look at the block spot and right-click once lined up (and the right-click
+     * rate allows). Returns true on the tick the placement is requested.
+     */
+    private boolean placeAt(Self me, Controls c, int x, int y, int z) {
+        double ex = x + 0.5 - me.x;
+        double ey = y + 0.5 - (me.y + EYE);
+        double ez = z + 0.5 - me.z;
+        float yaw = (float) yawTo(me.x, me.z, x + 0.5, z + 0.5);
+        float pitch = (float) -Math.toDegrees(Math.atan2(ey, Math.sqrt(ex * ex + ez * ez)));
+        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.pitch = approach(me.pitch, pitch, turnRate());
+        if (placeCooldown > 0 || Math.sqrt(ex * ex + ey * ey + ez * ez) > PLACE_REACH) return false;
+        if (Math.abs(wrap(c.yaw - yaw)) < 20 && Math.abs(c.pitch - pitch) < 20) {
+            c.place = true;
+            c.px = x;
+            c.py = y;
+            c.pz = z;
+            placeCooldown = 2 + rng.nextInt(2); // a quick right-click rate
+            return true;
+        }
+        return false;
     }
 
     /** The entity reports whether the last requested block went down. */
     public void onPlaceResult(boolean placed) {
-        if (!placed && mode == Mode.WALL) wallLeft = 0;
+        if (!placed && mode == Mode.STAIRS) stairBackoff = 3;
     }
 
     // ---- Aiming.
@@ -606,13 +982,13 @@ public final class PvpBrain {
         double px = t.x + tvx * lead;
         double pz = t.z + tvz * lead;
         double py = t.y + (body ? 1.2 : 1.0) + tvy * lead;
-        double noise = diff.aimNoiseDeg() * (rng.nextDouble() - 0.5) * 0.6;
+        double noise = aimNoise() * (rng.nextDouble() - 0.5) * 0.6;
         float yaw = (float) (yawTo(me.x, me.z, px, pz) + noise + sideLead);
         double ddx = px - me.x;
         double ddz = pz - me.z;
         float pitch = (float) -Math.toDegrees(Math.atan2(py - (me.y + EYE), Math.sqrt(ddx * ddx + ddz * ddz)));
-        c.yaw = turnToward(me.yaw, yaw, diff.maxTurnDeg());
-        c.pitch = approach(me.pitch, pitch, diff.maxTurnDeg());
+        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.pitch = approach(me.pitch, pitch, turnRate());
     }
 
     /** Aim a thrown item at where the target will be when it arrives. */
@@ -632,9 +1008,9 @@ public final class PvpBrain {
         }
         float yaw = (float) yawTo(me.x, me.z, px, pz);
         float pitch = shot == null ? me.pitch : shot.pitch;
-        double noise = diff.aimNoiseDeg() * (rng.nextDouble() - 0.5) * 0.4;
-        c.yaw = turnToward(me.yaw, (float) (yaw + noise), diff.maxTurnDeg());
-        c.pitch = approach(me.pitch, pitch, diff.maxTurnDeg());
+        double noise = aimNoise() * (rng.nextDouble() - 0.5) * 0.4;
+        c.yaw = turnToward(me.yaw, (float) (yaw + noise), turnRate());
+        c.pitch = approach(me.pitch, pitch, turnRate());
         return shot;
     }
 
@@ -645,7 +1021,7 @@ public final class PvpBrain {
     // ---- Tendencies (style, learning, skill).
 
     private double preferredRange() {
-        double r = 2.85 + jitterRange;
+        double r = 2.85 + jitterRange + rangeDrift;
         switch (style) {
             case AGGRESSIVE:
                 r -= 0.25;
@@ -658,7 +1034,7 @@ public final class PvpBrain {
         }
         // Against rushers, hold a bit further and let them run into the hit.
         r += 0.25 * diff.adaptWeight() * (profile.rush - 0.5);
-        return Math.max(2.3, Math.min(3.1, r));
+        return Math.max(2.2, Math.min(3.25, r));
     }
 
     private int strafeTicks() {
@@ -666,7 +1042,17 @@ public final class PvpBrain {
     }
 
     private double retreatHealth() {
-        return style == Playstyle.AGGRESSIVE ? 4 : (style == Playstyle.DEFENSIVE ? 9 : 7);
+        return style == Playstyle.AGGRESSIVE ? 3 : (style == Playstyle.DEFENSIVE ? 8 : 6);
+    }
+
+    /** Ticks between seeing something and acting on it: 200 ms down to 50 ms. */
+    int reaction() {
+        return (int) Math.round(4 - 3 * diff.skill());
+    }
+
+    /** Aim wander, a little wider than the Sumo opponent's; much wider during a sloppy moment. */
+    private double aimNoise() {
+        return diff.aimNoiseDeg() * 1.2 * (mistake(1) ? 3 : 1);
     }
 
     private double buildMul() {
@@ -699,7 +1085,7 @@ public final class PvpBrain {
 
     private Target delayed(Target now) {
         seen.addLast(now.copy());
-        int delay = diff.reactionTicks();
+        int delay = reaction();
         while (seen.size() > delay + 1) seen.removeFirst();
         return seen.peekFirst();
     }
