@@ -37,23 +37,27 @@ public class KestrelMod {
         client = new KestrelClient(dataDir, event.getModMetadata().version);
         client.preInit();
         com.kestrel.sumo.Sumo.preInit();
+        com.kestrel.openmap.OpenMap.preInit();
     }
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         client.init();
         com.kestrel.sumo.Sumo.init(this);
+        com.kestrel.openmap.OpenMap.init(this);
     }
 
-    /** Singleplayer server starting (Sumo practice runs only in its own world). */
+    /** Singleplayer server starting (Sumo and Open Map practice run only in their own worlds). */
     @Mod.EventHandler
     public void serverStarting(FMLServerStartingEvent event) {
         com.kestrel.sumo.Sumo.serverStarting(event);
+        com.kestrel.openmap.OpenMap.serverStarting(event);
     }
 
     @Mod.EventHandler
     public void serverStopping(FMLServerStoppingEvent event) {
         com.kestrel.sumo.Sumo.serverStopping();
+        com.kestrel.openmap.OpenMap.serverStopping();
     }
 
     @Mod.EventHandler

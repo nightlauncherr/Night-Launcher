@@ -79,7 +79,7 @@ public final class SumoDifficulty {
         return clamp(next);
     }
 
-    static double clamp(double v) {
+    public static double clamp(double v) {
         if (Double.isNaN(v)) return START;
         return v < MIN ? MIN : (v > MAX ? MAX : v);
     }

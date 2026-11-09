@@ -33,7 +33,9 @@ public final class SumoClient {
     /** Main menu ticks before opening the world (lets the menu settle once). */
     private static final int AUTO_OPEN_DELAY = 10;
 
-    private final KeyBinding menuKey = new KeyBinding("Sumo menu (Sumo practice)", Keyboard.KEY_M, InputManager.CATEGORY);
+    /** The practice menu key (M), shared with Open Map PvP: one key, whichever mode's world is open. */
+    private static final KeyBinding MENU_KEY = new KeyBinding("Sumo menu (Sumo practice)", Keyboard.KEY_M, InputManager.CATEGORY);
+    private final KeyBinding menuKey = MENU_KEY;
     private boolean autoOpenPending = Boolean.getBoolean(OPEN_SUMO_PROPERTY);
     private int menuTicks;
 
@@ -46,6 +48,11 @@ public final class SumoClient {
         return menuKey;
     }
 
+    /** The shared practice menu key. */
+    public static KeyBinding practiceMenuKey() {
+        return MENU_KEY;
+    }
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -53,6 +60,7 @@ public final class SumoClient {
         if (autoOpenPending) autoOpen(mc);
         SumoView view = SumoView.current();
         if (mc.theWorld == null || mc.thePlayer == null || view == null) {
+            if (com.kestrel.openmap.OpenMapView.current() != null) return; // Open Map handles the key there
             while (menuKey.isPressed()) {
                 // not in the Sumo world: the key does nothing
             }

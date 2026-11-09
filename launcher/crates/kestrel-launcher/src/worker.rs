@@ -148,9 +148,26 @@ pub struct PlayRequest {
     pub cfg: LauncherConfig,
     pub game: GameSettings,
     pub account: LaunchAccount,
-    /// Started with the SUMO button: the game opens the Sumo practice world
-    /// from its main menu (`-Dkestrel.openSumo=true`).
-    pub open_sumo: bool,
+    /// Started with a practice button: the game opens that practice world
+    /// from its main menu.
+    pub practice: Option<Practice>,
+}
+
+/// The practice modes the Home page can start straight into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Practice {
+    Sumo,
+    OpenMap,
+}
+
+impl Practice {
+    /// The JVM option the client mod reads to open the world.
+    pub fn jvm_flag(self) -> &'static str {
+        match self {
+            Practice::Sumo => "-Dkestrel.openSumo=true",
+            Practice::OpenMap => "-Dkestrel.openMap=true",
+        }
+    }
 }
 
 /// Ensure installation, authenticate, build the command, start the game and
@@ -162,7 +179,7 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
         cfg,
         game,
         account,
-        open_sumo,
+        practice,
     } = req;
     let accounts_path = layout.accounts();
     let fail = |e: String| {
@@ -267,9 +284,9 @@ pub fn play(req: PlayRequest, progress: SharedProgress, tx: Sender<Msg>, ctx: eg
             &layout,
             &Platform::current(),
         )?;
-        if open_sumo {
+        if let Some(p) = practice {
             // A JVM option, so it goes before the main class with the others.
-            spec.args.insert(0, "-Dkestrel.openSumo=true".to_string());
+            spec.args.insert(0, p.jvm_flag().to_string());
         }
         Ok((spec, lock, session.name))
     })();

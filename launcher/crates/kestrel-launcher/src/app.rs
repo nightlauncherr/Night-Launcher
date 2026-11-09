@@ -619,16 +619,21 @@ impl LauncherApp {
     }
 
     fn play_instance(&mut self, id: &str, ctx: &egui::Context) {
-        self.launch_instance(id, false, ctx);
+        self.launch_instance(id, None, ctx);
     }
 
-    /// Start the default instance straight into the Sumo practice lobby.
-    fn play_sumo(&mut self, ctx: &egui::Context) {
+    /// Start the default instance straight into a practice mode's lobby.
+    fn play_practice(&mut self, practice: worker::Practice, ctx: &egui::Context) {
         let id = self.cfg.default_instance.clone();
-        self.launch_instance(&id, true, ctx);
+        self.launch_instance(&id, Some(practice), ctx);
     }
 
-    fn launch_instance(&mut self, id: &str, open_sumo: bool, ctx: &egui::Context) {
+    fn launch_instance(
+        &mut self,
+        id: &str,
+        practice: Option<worker::Practice>,
+        ctx: &egui::Context,
+    ) {
         // A signed release marked this version as no longer supported.
         if let Some(v) = self.updater.required_version(&self.cfg) {
             self.notify(Status::Error(format!(
@@ -694,7 +699,7 @@ impl LauncherApp {
             cfg: self.cfg.clone(),
             game: inst.meta.game.clone(),
             account,
-            open_sumo,
+            practice,
         };
         let (tx, ctx2) = (self.tx.clone(), ctx.clone());
         if let Err(e) = std::thread::Builder::new()
@@ -1278,7 +1283,14 @@ impl LauncherApp {
             .on_hover_text("Start the game straight into the Sumo practice lobby")
             .clicked()
         {
-            self.play_sumo(ctx);
+            self.play_practice(worker::Practice::Sumo, ctx);
+        }
+        ui.add_space(4.0);
+        if theme::button_sized(ui, Kind::Secondary, None, "OPEN MAP PVP", !blocked, w)
+            .on_hover_text("Start the game straight into the Open Map PvP lobby")
+            .clicked()
+        {
+            self.play_practice(worker::Practice::OpenMap, ctx);
         }
         if self.busy == Busy::SigningIn && self.page == Page::Home {
             ui.add_space(4.0);
