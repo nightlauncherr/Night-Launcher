@@ -225,7 +225,7 @@ public final class PvpBrain {
 
     /** It landed a sword hit for about {@code damage} (before the player's armor). */
     public void onHitLanded(boolean sprintHit, double damage) {
-        targetHealth = Math.max(1, targetHealth - damage * 0.6); // iron armor takes ~40%
+        targetHealth = Math.max(1, targetHealth - damage * 0.2); // full diamond armor takes 80% (20 points x 4%)
         if (sprintHit && rng.nextDouble() < diff.wtapChance()) wtapTicks = 2 + rng.nextInt(3);
     }
 

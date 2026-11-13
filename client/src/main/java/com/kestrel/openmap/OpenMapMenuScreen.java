@@ -241,7 +241,7 @@ final class OpenMapMenuScreen extends GuiScreen {
         } else if (v.matchRunning) {
             sub = "A match is running. STOP (or /stopopenmap) ends it without counting it.";
         } else {
-            sub = "Iron kit, open terrain. First death loses the round.";
+            sub = "Diamond kit, open terrain. First death loses the round.";
         }
         text(trim(sub, W - 16), lx, py + 19, Theme.MUTED);
         RenderUtil.rect(lx, py + 30, px + W - 8, py + 31, Theme.TRACK);

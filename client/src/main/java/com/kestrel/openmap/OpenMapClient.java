@@ -99,7 +99,7 @@ public final class OpenMapClient {
         String[] lines = {
                 EnumChatFormatting.GREEN + "" + EnumChatFormatting.BOLD + "NIGHT OPEN MAP PVP",
                 EnumChatFormatting.GREEN + "PRESS " + keyName.toUpperCase(java.util.Locale.ROOT) + " TO OPEN THE MENU",
-                EnumChatFormatting.GRAY + "Iron kit vs " + EntityPvpBot.NAME + ": sword, rod, snowballs, planks.",
+                EnumChatFormatting.GRAY + "Diamond kit vs " + EntityPvpBot.NAME + ": sword, rod, snowballs, planks.",
                 EnumChatFormatting.GRAY + "Opponent: " + EnumChatFormatting.WHITE + v.modeLabel + " " + v.effectivePercent + "%"
                         + EnumChatFormatting.GRAY + ", " + EnumChatFormatting.WHITE + v.styleLabel
                         + EnumChatFormatting.GRAY + "   Record " + EnumChatFormatting.WHITE + v.wins + "-" + v.losses,
