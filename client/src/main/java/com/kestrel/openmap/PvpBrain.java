@@ -109,6 +109,10 @@ public final class PvpBrain {
     private final int[] wallCells = new int[12];
     private int wallCount;
     private boolean retreatAfterWall;
+    /** Player hits taken since its own last hit (being comboed). */
+    private int hitsInRow;
+    /** Hit from range (a snowball or the rod): take cover when it can. */
+    private boolean coverWanted;
     private int stairBackoff;
     private double lastStepY;
     private int placeCooldown;
@@ -197,6 +201,8 @@ public final class PvpBrain {
         bridgeLeft = 0;
         snowAfterTower = false;
         recoverTicks = 0;
+        hitsInRow = 0;
+        coverWanted = false;
         dodgeTicks = 0;
         dodgeCooldown = 0;
         mistakeTimer = 60 + rng.nextInt(80);
@@ -226,6 +232,7 @@ public final class PvpBrain {
     /** It landed a sword hit for about {@code damage} (before the player's armor). */
     public void onHitLanded(boolean sprintHit, double damage) {
         targetHealth = Math.max(1, targetHealth - damage * 0.2); // full diamond armor takes 80% (20 points x 4%)
+        hitsInRow = 0;
         if (sprintHit && rng.nextDouble() < diff.wtapChance()) wtapTicks = 2 + rng.nextInt(3);
     }
 
@@ -234,6 +241,8 @@ public final class PvpBrain {
         // React now rather than at the next decision: re-plan, and stop a slow item use up close.
         recoverTicks = 6;
         decideTimer = 0;
+        hitsInRow++;
+        if (lastDist > 6) coverWanted = true;
         replanTimer = 0;
         if ((mode == Mode.SNOWBALL || (mode == Mode.ROD && !rodCast)) && lastDist < 5) setMode(Mode.CHASE);
         if (mode == Mode.TOWER || mode == Mode.WALL || mode == Mode.STAIRS || mode == Mode.BRIDGE) return;
@@ -460,6 +469,27 @@ public final class PvpBrain {
         if (me.planks >= 1 && buildCooldown == 0 && me.onGround && mode == Mode.CHASE && path.isEmpty()
                 && dist > 3 && gapAhead(me, t)) {
             startBridge(me, t);
+            return;
+        }
+        // Being comboed up close: break it with a block between them, or a quick step up.
+        if (canBuild && hitsInRow >= 3 && dist < 4.5 && rng.nextDouble() < 0.7 * buildMul() * jitterBuild) {
+            hitsInRow = 0;
+            if (rng.nextBoolean() && dist > 1.6) startWall(me, t);
+            else startTower(me, 1, false);
+            return;
+        }
+        // Hit from range: put a wall up as cover before closing in again.
+        if (coverWanted) {
+            coverWanted = false;
+            if (canBuild && dist > 5 && dist < 20 && rng.nextDouble() < 0.5 * buildMul() * jitterBuild) {
+                startWall(me, t);
+                return;
+            }
+        }
+        // Open ground at mid range: take the high ground for a moment and throw down.
+        if (canBuild && t.visible && dist > 7 && dist < 16 && Math.abs(dy) < 1.5 && me.snowballs > 4
+                && rng.nextDouble() < 0.012 * buildMul() * jitterBuild) {
+            startTower(me, 2, true);
             return;
         }
         // Losing a close trade: get up out of reach (and throw down), or wall them off.

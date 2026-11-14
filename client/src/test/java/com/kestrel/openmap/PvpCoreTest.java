@@ -435,4 +435,40 @@ public class PvpCoreTest {
         }
         assertTrue(placed <= 3);
     }
+
+    @Test
+    public void buildsDuringAnOrdinaryFightToo() {
+        // Two players on flat open ground at mid range: over a minute it should go up for the
+        // high ground at least once (not only when stuck or losing).
+        int built = 0;
+        for (int seed = 0; seed < 10; seed++) {
+            PvpBrain b = brain(new Blocks(), 0.7, 300 + seed);
+            PvpBrain.Self me = self(0.5, 0.5);
+            PvpBrain.Target t = target(0.5, 11.5);
+            for (int i = 0; i < 1200; i++) {
+                PvpBrain.Controls c = step(b, me, t);
+                if (c.mode == PvpBrain.Mode.TOWER || c.mode == PvpBrain.Mode.WALL) {
+                    built++;
+                    break;
+                }
+            }
+        }
+        assertTrue("never built in open play: " + built, built >= 5);
+    }
+
+    @Test
+    public void breaksACombo() {
+        PvpBrain b = brain(new Blocks(), 0.7, 21);
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(0.5, 3.0);
+        step(b, me, t);
+        boolean broke = false;
+        for (int i = 0; i < 40 && !broke; i++) {
+            if (i % 10 == 0) b.onHitTaken();
+            PvpBrain.Controls c = step(b, me, t);
+            broke = c.mode == PvpBrain.Mode.TOWER || c.mode == PvpBrain.Mode.WALL;
+        }
+        assertTrue("took a 4-hit combo without building", broke);
+    }
 }
+
