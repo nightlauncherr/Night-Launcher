@@ -53,9 +53,12 @@ public final class PvpBrain {
         public float yaw;
         public boolean onGround, sprinting, visible;
         public int hurtTime;
+        /** Which opponent this is (entity id); a different one is a new engagement. */
+        public int id;
 
         Target copy() {
             Target t = new Target();
+            t.id = id;
             t.x = x;
             t.y = y;
             t.z = z;
@@ -109,6 +112,18 @@ public final class PvpBrain {
     private final int[] wallCells = new int[12];
     private int wallCount;
     private boolean retreatAfterWall;
+    // First contact: a player who just came into reach isn't hit on that same tick. It
+    // notices, reacts, then swings; once it's fighting there are no extra pauses.
+    /** Fighting this opponent now: clicks follow the usual hit timing. */
+    private boolean engaged;
+    /** Ticks left before the first swing of a new engagement; -1 when not counting. */
+    private int engageDelay = -1;
+    /** Ticks the opponent has been out of reach (perceived). */
+    private int outOfReachTicks;
+    /** Tick count when it last stopped fighting (for re-engaging a known opponent). */
+    private int disengagedAt = -1000;
+    private int engagedTargetId = Integer.MIN_VALUE;
+    private int clock;
     /** Player hits taken since its own last hit (being comboed). */
     private int hitsInRow;
     /** Hit from range (a snowball or the rod): take cover when it can. */
@@ -201,6 +216,10 @@ public final class PvpBrain {
         bridgeLeft = 0;
         snowAfterTower = false;
         recoverTicks = 0;
+        engaged = false;
+        engageDelay = -1;
+        outOfReachTicks = 0;
+        disengagedAt = -1000;
         hitsInRow = 0;
         coverWanted = false;
         dodgeTicks = 0;
@@ -320,6 +339,7 @@ public final class PvpBrain {
         double dy = t.y - me.y;
         lastDist = dist;
         trackStuck(me);
+        updateEngagement(t, dist);
 
         if (clutch(me, c)) {
             c.mode = mode;
@@ -629,6 +649,7 @@ public final class PvpBrain {
         // Click: within reach, aimed, and their hurt flash is over (a hit lands again).
         boolean falling = !me.onGround && me.my < 0 && me.fallDistance > 0;
         int window = diff.skill() > 0.6 ? 1 : 2;
+        if (!engaged) return; // still reacting to them coming into reach (no pre-swinging either)
         if (dist <= REACH + 0.35 && clickCooldown == 0 && aimError(me, t) < 30
                 && (t.hurtTime <= window || falling || mistake(1))) {
             c.attack = true;
@@ -638,6 +659,59 @@ public final class PvpBrain {
             c.attack = true;
             clickCooldown = clickGap();
         }
+    }
+
+    /**
+     * Engagement, from what it perceives each tick (whatever it is doing). When the
+     * opponent first comes into reach a short reaction timer runs before the first
+     * swing; it isn't restarted while they stay close, survives brief steps out of
+     * reach, and is shorter when re-engaging someone it was just fighting.
+     */
+    private void updateEngagement(Target t, double dist) {
+        clock++;
+        if (t.id != engagedTargetId) {
+            // A different opponent: a fresh first contact.
+            engagedTargetId = t.id;
+            engaged = false;
+            engageDelay = -1;
+            outOfReachTicks = 0;
+            disengagedAt = -1000;
+        }
+        // First contact counts from real reach (3 blocks), not the slightly early click margin.
+        boolean inReach = dist <= (engaged ? REACH + 0.35 : REACH) && t.visible;
+        if (inReach) {
+            outOfReachTicks = 0;
+            if (engaged) return;
+            if (engageDelay < 0) engageDelay = firstSwingDelay(clock - disengagedAt < 40);
+            if (engageDelay > 0) engageDelay--;
+            if (engageDelay == 0) {
+                engaged = true;
+                engageDelay = -1;
+            }
+            return;
+        }
+        outOfReachTicks++;
+        if (engaged) {
+            // A moment out of reach is still the same fight (knockback, strafing).
+            if (outOfReachTicks > 14 && dist > REACH + 1.5) {
+                engaged = false;
+                disengagedAt = clock;
+            }
+        } else if (outOfReachTicks > 6) {
+            engageDelay = -1; // they backed off before it reacted: start over next time
+        }
+    }
+
+    /**
+     * Ticks from "in reach" to the first swing, on top of the perception lag
+     * ({@link #reaction()}): about 100-300 ms, a little quicker at higher skill,
+     * varied, and shorter against an opponent it was fighting a moment ago.
+     */
+    int firstSwingDelay(boolean recent) {
+        double base = 4.6 - 2.0 * diff.skill(); // ~3.9 at 0.35, ~2.8 at 0.88
+        if (recent) base *= 0.5;
+        int d = (int) Math.round(base + (rng.nextDouble() * 2.0 - 0.5) * (recent ? 0.6 : 1.0));
+        return Math.max(1, Math.min(7, d));
     }
 
     private void retreat(Self me, Target t, double dist, Controls c) {

@@ -470,5 +470,177 @@ public class PvpCoreTest {
         }
         assertTrue("took a 4-hit combo without building", broke);
     }
+
+    // ---- First contact: a short, varied reaction before the first swing.
+
+    /** Bot standing at the origin; the target walks in along z at {@code speed} blocks/tick and stops at 2.6. */
+    private static int[] approach(long seed, double skill, double speed) {
+        PvpBrain b = brain(new Blocks(), skill, seed);
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(0.5, 9.0);
+        t.id = 1;
+        int entry = -1;
+        int first = -1;
+        for (int i = 0; i < 200 && first < 0; i++) {
+            t.z = Math.max(0.5 + 2.6, t.z - speed);
+            t.sprinting = speed > 0.2;
+            double real = t.z - me.z;
+            if (entry < 0 && real <= PvpBrain.REACH) entry = i;
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            me.slot = c.slot;
+            // Never a free swing that would land before it has reacted.
+            if (c.attack) {
+                assertTrue("swung with the player out of reach (" + real + ")", entry >= 0);
+                first = i;
+            }
+        }
+        return new int[]{entry, first};
+    }
+
+    @Test
+    public void reactsBeforeTheFirstHitWhenAPlayerWalksIntoReach() {
+        java.util.Set<Integer> delays = new java.util.HashSet<Integer>();
+        for (int seed = 0; seed < 30; seed++) {
+            int[] r = approach(400 + seed, 0.71, 0.13); // walking
+            int delay = r[1] - r[0];
+            assertTrue("no hit at all", r[1] >= 0);
+            assertTrue("hit the instant they came into reach: " + delay + " ticks", delay >= 3);
+            assertTrue("too slow to react: " + delay + " ticks", delay <= 10);
+            delays.add(delay);
+        }
+        assertTrue("same delay every time: " + delays, delays.size() >= 3);
+    }
+
+    @Test
+    public void reactsBeforeTheFirstHitWhenAPlayerSprintsAtIt() {
+        for (int seed = 0; seed < 30; seed++) {
+            int[] r = approach(500 + seed, 0.71, 0.28); // sprinting straight at it
+            int delay = r[1] - r[0];
+            assertTrue("hit the instant they came into reach: " + delay, delay >= 3);
+            assertTrue("too slow: " + delay, delay <= 10);
+        }
+    }
+
+    @Test
+    public void higherSkillReactsAtLeastAsFastOnAverage() {
+        double low = 0;
+        double high = 0;
+        for (int seed = 0; seed < 40; seed++) {
+            int[] a = approach(600 + seed, 0.3, 0.13);
+            int[] b = approach(600 + seed, 1.0, 0.13);
+            low += a[1] - a[0];
+            high += b[1] - b[0];
+        }
+        assertTrue("low " + low / 40 + " high " + high / 40, high <= low);
+    }
+
+    /** Engage at 2.6, then move the target as told, returning ticks to the next swing after it is back. */
+    private static int swingAfter(PvpBrain b, PvpBrain.Self me, PvpBrain.Target t, int outTicks, double outZ) {
+        for (int i = 0; i < outTicks; i++) {
+            t.z = outZ;
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            // (For its reaction time it still sees them where they were.)
+            assertFalse("swung at a player " + (outZ - me.z) + " away",
+                    i > b.reaction() && c.attack && outZ - me.z > PvpBrain.REACH + 1.5);
+        }
+        t.z = 3.1;
+        int back = -1;
+        for (int i = 0; i < 60; i++) {
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            if (c.mode != PvpBrain.Mode.MELEE && c.mode != PvpBrain.Mode.CHASE) return -2; // busy (pillar, throw): not a reaction test
+            if (c.attack) {
+                back = i;
+                break;
+            }
+        }
+        return back;
+    }
+
+    private static PvpBrain engagedBrain(long seed, PvpBrain.Self me, PvpBrain.Target t) {
+        PvpBrain b = brain(new Blocks(), 0.71, seed);
+        t.id = 1;
+        boolean hit = false;
+        for (int i = 0; i < 60 && !hit; i++) {
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            hit = c.attack;
+        }
+        assertTrue(hit);
+        return b;
+    }
+
+    @Test
+    public void stepsInAndOutOfReach() {
+        int measured = 0;
+        for (int seed = 0; seed < 20; seed++) {
+            PvpBrain.Self me = self(0.5, 0.5);
+            PvpBrain.Target t = target(0.5, 3.1);
+            PvpBrain b = engagedBrain(700 + seed, me, t);
+            // Knocked a little out of reach for a moment: the same fight, no new reaction.
+            int quick = swingAfter(b, me, t, 5, 4.4);
+            if (quick == -2) continue;
+            assertTrue("a brief step out restarted the reaction: " + quick, quick >= 0 && quick <= 4);
+            // Out for a while, then back: a new, short reaction to someone it was just fighting.
+            int recent = swingAfter(b, me, t, 22, 9.0);
+            if (recent == -2) continue;
+            assertTrue("re-engaging a recent opponent: " + recent, recent >= 1 && recent <= 6);
+            // Gone a long time: a full first-contact reaction again.
+            int fresh = swingAfter(b, me, t, 120, 12.0);
+            if (fresh == -2) continue;
+            assertTrue("fresh engagement: " + fresh, fresh >= 2 && fresh <= 10);
+            assertTrue("fresh reaction not slower than re-engaging: " + fresh + " vs " + recent, fresh >= recent);
+            measured++;
+        }
+        assertTrue("too few clean encounters: " + measured, measured >= 5);
+    }
+
+    @Test
+    public void noExtraPausesOnceFighting() {
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(0.5, 3.0);
+        PvpBrain b = engagedBrain(800, me, t);
+        int clicks = 0;
+        int longestGap = 0;
+        int gap = 0;
+        for (int i = 0; i < 200; i++) {
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            if (c.attack) {
+                clicks++;
+                longestGap = Math.max(longestGap, gap);
+                gap = 0;
+            } else {
+                gap++;
+            }
+        }
+        assertTrue("clicks " + clicks, clicks >= 15);
+        assertTrue("paused mid-fight for " + longestGap + " ticks", longestGap <= 8);
+    }
+
+    @Test
+    public void aNewOpponentIsANewFirstContact() {
+        PvpBrain.Self me = self(0.5, 0.5);
+        PvpBrain.Target t = target(0.5, 3.0);
+        PvpBrain b = engagedBrain(900, me, t);
+        t.id = 2; // switched to someone else standing just as close
+        // For its reaction time it still sees the old one; after that, a new first contact.
+        int seenAt = b.reaction() + 1;
+        int first = -1;
+        for (int i = 0; i < 40 && first < 0; i++) {
+            PvpBrain.Controls c = b.tick(me, t);
+            me.yaw = c.yaw;
+            me.pitch = c.pitch;
+            if (c.attack && i >= seenAt) first = i;
+        }
+        assertTrue("hit the new opponent with no reaction: " + (first - seenAt), first - seenAt >= 1);
+    }
 }
 
