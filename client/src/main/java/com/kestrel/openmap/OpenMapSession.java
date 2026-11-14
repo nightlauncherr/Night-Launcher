@@ -81,9 +81,6 @@ final class OpenMapSession {
     // Per-round counts.
     private PvpProfile.Observation obs = new PvpProfile.Observation();
     private int roundBotHits, roundPlayerHits, roundBotRods, roundBotSnowballs, roundBotBlocks, roundPlayerBlocks;
-    /** Playtest check of the first-contact reaction: tick the player was first in real reach, -1 until then. */
-    private int reachTick = -1;
-    private boolean firstSwingLogged;
     private int roundRodHits, roundSnowHits;
     private double roundDamageDealt, roundDamageTaken;
     // Watching the player (for learning).
@@ -265,8 +262,6 @@ final class OpenMapSession {
         phase = Phase.LOBBY;
         timer = 0;
         fightTicks = 0;
-        reachTick = -1;
-        firstSwingLogged = false;
         if (player == null) return;
         player.setGameType(WorldSettings.GameType.ADVENTURE);
         refresh(player);
@@ -338,8 +333,6 @@ final class OpenMapSession {
                     title(EnumChatFormatting.DARK_GREEN + "FIGHT!", null);
                     phase = Phase.FIGHT;
                     fightTicks = 0;
-                    reachTick = -1;
-                    firstSwingLogged = false;
                     publish();
                 }
                 break;
@@ -428,19 +421,6 @@ final class OpenMapSession {
         target.id = player.getEntityId();
         warnOfProjectiles(e);
         PvpBrain.Controls c = brain.tick(self, target);
-        if (!firstSwingLogged) {
-            double dx = player.posX - e.posX;
-            double dz = player.posZ - e.posZ;
-            if (reachTick < 0 && dx * dx + dz * dz <= PvpBrain.REACH * PvpBrain.REACH) reachTick = fightTicks;
-            if (c.attack) {
-                firstSwingLogged = true;
-                if (reachTick >= 0) {
-                    log.info("[Kestrel] Open Map: first swing {} ms after the player came into reach", (fightTicks - reachTick) * 50);
-                } else {
-                    log.info("[Kestrel] Open Map: first swing before the player was in reach");
-                }
-            }
-        }
         e.apply(c, player);
         if (e.lastPlaceResult != 0) brain.onPlaceResult(e.lastPlaceResult > 0);
     }
@@ -737,8 +717,6 @@ final class OpenMapSession {
     private void resetRoundCounts() {
         obs = new PvpProfile.Observation();
         roundBotHits = roundPlayerHits = roundBotRods = roundBotSnowballs = roundBotBlocks = roundPlayerBlocks = 0;
-        reachTick = -1;
-        firstSwingLogged = false;
         roundRodHits = roundSnowHits = 0;
         roundDamageDealt = roundDamageTaken = 0;
         lastPx = Double.NaN;
