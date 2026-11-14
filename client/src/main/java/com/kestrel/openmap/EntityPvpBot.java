@@ -95,7 +95,7 @@ public class EntityPvpBot extends EntityLivingBase {
     }
 
     /**
-     * The session kit (once per session, kept between rounds): diamond armor,
+     * The kit, full again at the start of every round: diamond armor,
      * iron sword, 64 oak planks, a fishing rod, 32 snowballs. Never a golden apple.
      */
     static void fillKit(ItemStack[] hotbar, ItemStack[] armor) {

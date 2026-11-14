@@ -95,11 +95,10 @@ final class OpenMapSession {
     private int sprintResetWindow;
     private boolean sprintDropped;
 
-    // Inventories last the whole session (from entering the world until leaving it).
+    // The kit is given on entering the world and refilled at the start of every round.
     private boolean playerKitGiven;
     private final ItemStack[] botHotbar = new ItemStack[4];
     private final ItemStack[] botArmor = new ItemStack[4];
-    private boolean botKitGiven;
     /** The player's PvP inventory while the owner is in edit mode (creative). */
     private ItemStack[] stashMain;
     private ItemStack[] stashArmor;
@@ -244,7 +243,7 @@ final class OpenMapSession {
         if (player != null && player != p) return;
         player = p;
         if (!playerKitGiven) {
-            // A new session: the starting inventory, exactly once. Rounds never refill it.
+            // Entering the world: the starting inventory (each round's start refills it).
             giveKit(p);
             playerKitGiven = true;
         }
@@ -294,7 +293,8 @@ final class OpenMapSession {
         brain.setPlaystyle(prefs.style());
         brain.resetRound();
         player.setGameType(WorldSettings.GameType.SURVIVAL);
-        refresh(player); // health, food and effects reset each round; the inventory does not
+        refresh(player); // health, food and effects reset each round
+        refillKit(player); // and the kit: full again, in the slots the player keeps things in
         spawnBot();
         placeAtStarts();
         resetRoundCounts();
@@ -795,7 +795,7 @@ final class OpenMapSession {
     // ---- Helpers.
 
     /**
-     * The player's starting inventory, given once per session: diamond armor;
+     * The player's starting inventory when entering the world: diamond armor;
      * hotbar iron sword, 64 oak planks, fishing rod, 32 snowballs, 3 golden
      * apples; nothing else.
      */
@@ -813,6 +813,52 @@ final class OpenMapSession {
         inv.armorInventory[3] = new ItemStack(Items.diamond_helmet);
         inv.currentItem = 0;
         p.inventoryContainer.detectAndSendChanges();
+    }
+
+    /** The kit's hotbar items in their default slots (0-4). */
+    private static ItemStack[] kitItems() {
+        return new ItemStack[]{new ItemStack(Items.iron_sword), new ItemStack(Blocks.planks, 64, 0),
+                new ItemStack(Items.fishing_rod), new ItemStack(Items.snowball, 32), new ItemStack(Items.golden_apple, 3, 0)};
+    }
+
+    /**
+     * Start of a round: the full kit again (new sword, rod and armor, 64 planks,
+     * 32 snowballs, 3 golden apples). Each item goes back to the slot where the
+     * player has it now, so a custom hotbar layout stays; an item that's gone
+     * (used up) returns to its default slot, or the first free one. Anything
+     * that isn't part of the kit is removed.
+     */
+    static void refillKit(EntityPlayerMP p) {
+        InventoryPlayer inv = p.inventory;
+        refillMain(inv.mainInventory);
+        inv.setItemStack(null);
+        inv.armorInventory[0] = new ItemStack(Items.diamond_boots);
+        inv.armorInventory[1] = new ItemStack(Items.diamond_leggings);
+        inv.armorInventory[2] = new ItemStack(Items.diamond_chestplate);
+        inv.armorInventory[3] = new ItemStack(Items.diamond_helmet);
+        p.inventoryContainer.detectAndSendChanges();
+    }
+
+    /** The main inventory part of {@link #refillKit}: full kit, each item in its current slot. */
+    static void refillMain(ItemStack[] main) {
+        ItemStack[] kit = kitItems();
+        int[] slot = new int[kit.length];
+        for (int k = 0; k < kit.length; k++) {
+            slot[k] = -1;
+            for (int i = 0; i < main.length && slot[k] < 0; i++) {
+                if (main[i] != null && main[i].getItem() == kit[k].getItem()) slot[k] = i;
+            }
+        }
+        for (int i = 0; i < main.length; i++) main[i] = null;
+        for (int k = 0; k < kit.length; k++) {
+            if (slot[k] >= 0) main[slot[k]] = kit[k];
+        }
+        for (int k = 0; k < kit.length; k++) {
+            if (slot[k] >= 0) continue;
+            int at = main[k] == null ? k : -1;
+            for (int i = 0; at < 0 && i < main.length; i++) if (main[i] == null) at = i;
+            if (at >= 0) main[at] = kit[k];
+        }
     }
 
     /** Keep the PvP inventory aside during edit mode (creative), exactly as it was. */
@@ -855,10 +901,7 @@ final class OpenMapSession {
 
     private void spawnBot() {
         if (bot != null && !bot.isDead) return;
-        if (!botKitGiven) {
-            EntityPvpBot.fillKit(botHotbar, botArmor); // once per session; rounds don't refill it
-            botKitGiven = true;
-        }
+        EntityPvpBot.fillKit(botHotbar, botArmor); // a full kit every round, like the player's (never apples)
         bot = new EntityPvpBot(world, this, botHotbar, botArmor);
         bot.setHealth(bot.getMaxHealth());
         OpenMapLayout.Spot b = layout.aiSpawn;
