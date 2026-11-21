@@ -402,12 +402,13 @@ public class PvpCoreTest {
     }
 
     @Test
-    public void playsBelowTheSetDifficultyButReactsQuickly() {
-        PvpBrain b = brain(new Blocks(), 1.0, 14);
-        // Eased skill 0.88: reaction 4 - 3 * 0.88 = 1.36 -> 1 tick.
-        assertEquals(1, b.reaction());
-        PvpBrain mid = brain(new Blocks(), 0.71, 15);
-        assertTrue(mid.reaction() <= new SumoDifficulty(0.71).reactionTicks());
+    public void reactionTimeFollowsTheDifficulty() {
+        // Full skill: 50 ms; Hard (0.7): ~150 ms; Easy (0.15): ~350 ms.
+        assertEquals(1, brain(new Blocks(), 1.0, 14).reaction());
+        int hard = brain(new Blocks(), 0.7, 15).reaction();
+        assertTrue("hard " + hard, hard >= 2 && hard <= 4);
+        int easy = brain(new Blocks(), 0.15, 16).reaction();
+        assertTrue("easy " + easy, easy >= 6 && easy <= 8);
     }
 
     @Test

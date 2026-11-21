@@ -27,6 +27,7 @@ import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.world.MinecraftException;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.WorldSettings;
+import net.minecraft.world.border.WorldBorder;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
@@ -206,6 +207,7 @@ final class OpenMapSession {
         terrain = new WorldTerrain(world);
         brain = new PvpBrain(new SumoDifficulty(skill()), stats.profile, terrain, rng);
         brain.setPlaystyle(prefs.style());
+        setArena();
         log.info("[Kestrel] Open Map session started (matches {}, difficulty {}, {})", stats.matches,
                 String.format("%.2f", stats.difficulty), prefs.style().label);
         publish();
@@ -286,6 +288,7 @@ final class OpenMapSession {
         removeBot();
         brain.setDifficulty(new SumoDifficulty(skill()));
         brain.setPlaystyle(prefs.style());
+        setArena();
         brain.resetRound();
         player.setGameType(WorldSettings.GameType.SURVIVAL);
         refresh(player); // health, food and effects reset each round
@@ -658,7 +661,14 @@ final class OpenMapSession {
         publish();
     }
 
-    void setStyle(Playstyle s) {
+    /** The opponent keeps inside the world border (the arena's barrier). */
+    private void setArena() {
+        if (world == null || brain == null) return;
+        WorldBorder b = world.getWorldBorder();
+        brain.setArena(b.minX(), b.minZ(), b.maxX(), b.maxZ());
+    }
+
+        void setStyle(Playstyle s) {
         prefs.playstyle = s.name();
         brain.setPlaystyle(s);
         savePrefs();
@@ -673,6 +683,7 @@ final class OpenMapSession {
         stats.save(f);
         brain = new PvpBrain(new SumoDifficulty(skill()), stats.profile, terrain, rng);
         brain.setPlaystyle(prefs.style());
+        setArena();
         scorePlayer = 0;
         scoreBot = 0;
         if (matchActive()) enterLobby(false);

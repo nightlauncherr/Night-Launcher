@@ -28,8 +28,9 @@ public final class PvpBrain {
     public static final double EYE = 1.62;
     /**
      * The Open Map opponent plays a little below the difficulty it is set to
-     * (players found it too sharp); it reacts faster than before but spaces,
-     * dodges and strafes less perfectly, and makes the odd mistake.
+     * (players found it too sharp): it spaces, dodges and strafes less
+     * perfectly and makes the odd mistake. How quickly it perceives, decides,
+     * turns and moves comes from {@link PvpTempo}.
      */
     static final double EASE = 0.88;
 
@@ -86,6 +87,8 @@ public final class PvpBrain {
     private final Terrain terrain;
     private final PathFinder paths;
     private SumoDifficulty diff;
+    /** How quickly it perceives, decides, turns and moves at this difficulty. */
+    private PvpTempo tempo;
     private Playstyle style = Playstyle.BALANCED;
     private final PvpProfile profile;
     private final Controls out = new Controls();
@@ -126,6 +129,8 @@ public final class PvpBrain {
     private int clock;
     /** Player hits taken since its own last hit (being comboed). */
     private int hitsInRow;
+    /** Tick count of the last player hit it took. */
+    private int lastHitTaken = -1000;
     /** Hit from range (a snowball or the rod): take cover when it can. */
     private boolean coverWanted;
     private int stairBackoff;
@@ -159,6 +164,32 @@ public final class PvpBrain {
     private double targetHealth = 20;
     private int regenTimer;
 
+    // Responsiveness (see PvpTempo).
+    /** Current perception lag in ticks; drifts a tick at a time around the difficulty's base. */
+    private int perceptionDelay = 1;
+    /** Ticks since the plan was last reconsidered. */
+    private int decisionSpan = 1;
+    /** Turn speed (degrees per tick) at the start of this tick, and after it. */
+    private float yawVelStart;
+    private float yawVel;
+    private boolean turnedThisTick;
+    /** Last tick's movement keys (they change only so fast). */
+    private float lastForward;
+    private float lastStrafe;
+    /** Keys released on purpose this tick (a W-tap): not smoothed. */
+    private boolean keyRelease;
+
+    // Defensive play when it is losing (0 = normal, 1 = fully defensive).
+    private double defense;
+    private int burstTicks;
+    private int burstCooldown;
+    private float burstYaw;
+
+    // The arena: the world border. NaN when unknown.
+    private double arenaMinX = Double.NaN, arenaMinZ, arenaMaxX, arenaMaxZ;
+    /** Distance from the border within which it starts steering back inward. */
+    static final double EDGE_MARGIN = 6.0;
+
     // Path following.
     private List<PathFinder.Node> path = Collections.emptyList();
     private int pathIndex;
@@ -173,6 +204,7 @@ public final class PvpBrain {
 
     public PvpBrain(SumoDifficulty diff, PvpProfile profile, Terrain terrain, Random rng) {
         this.diff = eased(diff);
+        this.tempo = new PvpTempo(diff.skill());
         this.profile = profile;
         this.terrain = terrain;
         this.rng = rng;
@@ -182,6 +214,21 @@ public final class PvpBrain {
 
     public void setDifficulty(SumoDifficulty d) {
         diff = eased(d);
+        tempo = new PvpTempo(d.skill());
+        perceptionDelay = (int) Math.round(tempo.perceptionTicks());
+    }
+
+    /** The arena's edges (the world border); it keeps itself inside them. */
+    public void setArena(double minX, double minZ, double maxX, double maxZ) {
+        arenaMinX = minX;
+        arenaMinZ = minZ;
+        arenaMaxX = maxX;
+        arenaMaxZ = maxZ;
+    }
+
+    /** 0 = playing normally, 1 = fully defensive. */
+    double defense() {
+        return defense;
     }
 
     private static SumoDifficulty eased(SumoDifficulty d) {
@@ -221,6 +268,7 @@ public final class PvpBrain {
         outOfReachTicks = 0;
         disengagedAt = -1000;
         hitsInRow = 0;
+        lastHitTaken = -1000;
         coverWanted = false;
         dodgeTicks = 0;
         dodgeCooldown = 0;
@@ -234,6 +282,14 @@ public final class PvpBrain {
         stuckTicks = 0;
         targetHealth = 20;
         regenTimer = 0;
+        perceptionDelay = (int) Math.round(tempo.perceptionTicks());
+        decisionSpan = 1;
+        decideTimer = 0;
+        yawVel = yawVelStart = 0;
+        lastForward = lastStrafe = 0;
+        defense = 0;
+        burstTicks = 0;
+        burstCooldown = 0;
         path = Collections.emptyList();
         pathIndex = 0;
         replanTimer = 0;
@@ -259,8 +315,9 @@ public final class PvpBrain {
     public void onHitTaken() {
         // React now rather than at the next decision: re-plan, and stop a slow item use up close.
         recoverTicks = 6;
-        decideTimer = 0;
+        decideTimer = Math.min(decideTimer, tempo.vary(tempo.hitReactTicks(), rng, 0));
         hitsInRow++;
+        lastHitTaken = clock;
         if (lastDist > 6) coverWanted = true;
         replanTimer = 0;
         if ((mode == Mode.SNOWBALL || (mode == Mode.ROD && !rodCast)) && lastDist < 5) setMode(Mode.CHASE);
@@ -297,7 +354,7 @@ public final class PvpBrain {
         dodgeAwayX = ax;
         dodgeAwayZ = az;
         // Reaction delay before the step, then a few ticks of it.
-        dodgeTicks = Math.min((int) tHit, reaction() + 5);
+        dodgeTicks = Math.min((int) tHit, reaction() + tempo.vary(tempo.dodgeReactTicks(), rng, 1));
     }
 
     /** The player ate the golden apple (visible: eating, then absorption hearts aren't visible but the bite is). */
@@ -312,6 +369,12 @@ public final class PvpBrain {
         lastMeY = me.y;
         lastMeZ = me.z;
         lastMeYaw = me.yaw;
+        tempo.drift(rng);
+        updatePerception();
+        yawVelStart = turnedThisTick ? yawVel : 0f;
+        yawVel = 0f;
+        turnedThisTick = false;
+        keyRelease = false;
         Target t = delayed(now);
         trackVelocity(t);
         regen();
@@ -330,6 +393,7 @@ public final class PvpBrain {
         if (buildCooldown > 0) buildCooldown--;
         if (dodgeCooldown > 0) dodgeCooldown--;
         if (placeCooldown > 0) placeCooldown--;
+        if (burstCooldown > 0) burstCooldown--;
         modeTicks++;
         updateImperfections();
 
@@ -340,15 +404,22 @@ public final class PvpBrain {
         lastDist = dist;
         trackStuck(me);
         updateEngagement(t, dist);
+        updateDefense(me, t, dist);
 
         if (clutch(me, c)) {
+            remember(c);
             c.mode = mode;
             return c;
         }
-        if (--decideTimer <= 0 || mode == Mode.CHASE || mode == Mode.MELEE) {
-            if (decideTimer <= 0) decideTimer = 2 + rng.nextInt(3);
+        // The plan is reconsidered at the pace of its difficulty. Someone right in front of it
+        // while it is running or chasing is a reaction (it has already seen them late), not a plan.
+        boolean threat = (mode == Mode.CHASE || mode == Mode.RETREAT) && t.visible && dist < REACH + 1.2;
+        if (--decideTimer <= 0 || threat) {
+            if (decideTimer <= 0) decideTimer = tempo.vary(tempo.decisionTicks(), rng, 1);
             choose(me, t, dist, dy);
+            decisionSpan = 0;
         }
+        decisionSpan++;
         switch (mode) {
             case TOWER:
                 tower(me, t, c);
@@ -379,9 +450,65 @@ public final class PvpBrain {
                 break;
         }
         applyDodge(c);
+        if (!building()) keepInside(me, c);
+        smoothInputs(c);
         if (recoverTicks > 0) recoverTicks--;
         c.mode = mode;
         return c;
+    }
+
+    /** Perception lag drifts one tick at a time toward the difficulty's base (scaled by focus). */
+    private void updatePerception() {
+        if (clock % 8 != 0) return;
+        int want = (int) Math.round(tempo.perceptionTicks() * tempo.focus() + (rng.nextDouble() - 0.5) * 0.8);
+        want = Math.max(1, Math.min(10, want));
+        if (want > perceptionDelay) perceptionDelay++;
+        else if (want < perceptionDelay) perceptionDelay--;
+    }
+
+    /**
+     * Movement keys change only so fast: a slower opponent eases into a new
+     * direction (a strafe reversal takes a few ticks on Easy, one on Expert).
+     * Deliberate key releases and building moves are exact.
+     */
+    private void smoothInputs(Controls c) {
+        if (!building() && !keyRelease) {
+            float r = tempo.inputRate();
+            c.forward = lastForward + clampf(c.forward - lastForward, r);
+            c.strafe = lastStrafe + clampf(c.strafe - lastStrafe, r);
+            if (c.forward < 0.8f) c.sprint = false;
+        }
+        remember(c);
+    }
+
+    private void remember(Controls c) {
+        lastForward = c.forward;
+        lastStrafe = c.strafe;
+    }
+
+    private static float clampf(float v, float max) {
+        return v > max ? max : (v < -max ? -max : v);
+    }
+
+    /**
+     * How defensively to play, from what it can tell: its own health against its
+     * estimate of the player's, a run of hits taken, and a player rushing it. It
+     * moves toward that at the pace of its difficulty, so it eases into and back
+     * out of defending rather than flipping.
+     */
+    private void updateDefense(Self me, Target t, double dist) {
+        if (hitsInRow > 0 && clock - lastHitTaken > 40) hitsInRow = 0; // that combo is over
+        double low = retreatHealth();
+        double want = (low + 6 - me.health) / 6.0; // starts 6 HP above the style's threshold, full at it
+        want = Math.max(0, Math.min(1, want));
+        double gap = targetHealth - me.health;
+        if (gap <= -2) want *= 0.35; // winning the trade: keep pressing
+        else if (gap < 2) want *= 0.75;
+        if (hitsInRow >= 2) want += 0.15 * Math.min(3, hitsInRow - 1);
+        if (t.visible && t.sprinting && dist < 6 && facing(t, me) < 30) want += 0.1;
+        want = Math.max(0, Math.min(1, want));
+        double rate = tempo.styleShiftRate();
+        defense += Math.max(-rate, Math.min(rate, want - defense));
     }
 
     private boolean building() {
@@ -421,7 +548,27 @@ public final class PvpBrain {
     }
 
     private float turnRate() {
-        return mistake(2) ? diff.maxTurnDeg() * 0.45f : diff.maxTurnDeg();
+        return mistake(2) ? tempo.maxTurnDeg() * 0.45f : tempo.maxTurnDeg();
+    }
+
+    /**
+     * Turn toward {@code to}: no faster than {@link #turnRate()}, and the turn
+     * speed builds up and slows down at the difficulty's pace (a slow opponent
+     * swings round sluggishly; a fast one flicks). Calling it again in the same
+     * tick replaces that tick's turn rather than adding to it.
+     */
+    private float turnYaw(float from, float to) {
+        float d = wrap(to - from);
+        float max = turnRate();
+        float want = d > max ? max : (d < -max ? -max : d);
+        float accel = tempo.turnAccelDeg();
+        float v = yawVelStart + clampf(want - yawVelStart, accel);
+        if ((d >= 0 && v > d) || (d <= 0 && v < d)) v = d; // don't overshoot
+        if (v > max) v = max;
+        if (v < -max) v = -max;
+        yawVel = v;
+        turnedThisTick = true;
+        return from + v;
     }
 
     /**
@@ -462,15 +609,25 @@ public final class PvpBrain {
         if (m != mode) {
             mode = m;
             modeTicks = 0;
+            if (m != Mode.RETREAT) burstTicks = 0;
         }
+    }
+
+    /**
+     * Chance that something it would consider every tick happens at least once
+     * since its last decision (decisions are spaced by difficulty, so per-tick
+     * odds are compounded over the gap and its habits keep their frequency).
+     */
+    private boolean chance(double perTick) {
+        if (perTick <= 0) return false;
+        if (perTick >= 1) return true;
+        return rng.nextDouble() < 1 - Math.pow(1 - perTick, Math.max(1, decisionSpan));
     }
 
     private void choose(Self me, Target t, double dist, double dy) {
         // Multi-tick actions finish (or time out) on their own.
         if (building() || mode == Mode.ROD || mode == Mode.SNOWBALL) return;
         double adapt = diff.adaptWeight();
-        boolean low = me.health <= retreatHealth() && targetHealth > me.health + 2;
-        boolean recovered = me.health >= 14 || targetHealth <= me.health;
         boolean canBuild = me.planks >= 2 && buildCooldown == 0 && me.onGround;
 
         // The player is up high: steps up to them from a distance, a pillar right beside them.
@@ -508,13 +665,13 @@ public final class PvpBrain {
         }
         // Open ground at mid range: take the high ground for a moment and throw down.
         if (canBuild && t.visible && dist > 7 && dist < 16 && Math.abs(dy) < 1.5 && me.snowballs > 4
-                && rng.nextDouble() < 0.012 * buildMul() * jitterBuild) {
+                && chance(0.012 * buildMul() * jitterBuild)) {
             startTower(me, 2, true);
             return;
         }
         // Losing a close trade: get up out of reach (and throw down), or wall them off.
         if (canBuild && mode == Mode.MELEE && dist < 4 && me.health <= 12 && me.health < targetHealth - 3
-                && rng.nextDouble() < 0.05 * buildMul() * jitterBuild) {
+                && chance(0.05 * buildMul() * jitterBuild)) {
             if (rng.nextBoolean()) startTower(me, 2, me.snowballs > 0);
             else {
                 startWall(me, t);
@@ -522,38 +679,66 @@ public final class PvpBrain {
             }
             return;
         }
-        if (mode == Mode.RETREAT && !recovered && dist < 18) {
-            // Under pressure: block them off or get up out of reach.
-            if (canBuild && dist < 6.5 && rng.nextDouble() < 0.6 * buildMul() * jitterBuild) {
-                if (rng.nextBoolean() && dist > 2.2) {
-                    startWall(me, t);
-                    retreatAfterWall = true;
-                } else startTower(me, 2, me.snowballs > 0);
+        if (mode == Mode.RETREAT) {
+            // Defending: back to the normal game once things look better (gradually, see updateDefense).
+            if (defense <= 0.3) {
+                setMode(t.visible && dist < 7 ? Mode.MELEE : Mode.CHASE);
                 return;
             }
-            if (me.snowballs > 0 && snowCooldown == 0 && dist > 5 && t.visible) {
-                startSnowball(2);
-                return;
+            if (dist < 18) {
+                // Under pressure: block them off or get up out of reach.
+                if (canBuild && dist < 6.5 && chance(0.26 * buildMul() * jitterBuild)) {
+                    if (rng.nextBoolean() && dist > 2.2) {
+                        startWall(me, t);
+                        retreatAfterWall = true;
+                    } else startTower(me, 2, me.snowballs > 0);
+                    return;
+                }
+                // Coming in at it: the rod stops a rush and buys space.
+                boolean closing = t.visible && closingSpeed(me) > 0.08;
+                if (t.visible && me.hasRod && rodCooldown == 0 && dist > 3.4 && dist < 8 && closing && chance(0.2)) {
+                    startRod();
+                    return;
+                }
+                if (me.snowballs > 0 && snowCooldown == 0 && dist > 4.5 && t.visible) {
+                    startSnowball(2);
+                    return;
+                }
+                return; // keep defending
             }
-            return; // keep retreating
         }
-        if (low && dist < 10) {
+        if (defense >= 0.55 && dist < 14) {
             setMode(Mode.RETREAT);
             return;
         }
-        // Mid range: rod or snowballs to open them up.
+        // Mid range: rod or snowballs to open them up (more of them when it is hurt).
+        double ranged = 1 + defense;
         if (t.visible && me.hasRod && rodCooldown == 0 && dist > 3.6 && dist < 12
-                && rng.nextDouble() < rodChance(adapt) * jitterRod) {
+                && chance(rodChance(adapt) * jitterRod * ranged)) {
             startRod();
             return;
         }
         boolean targetBuilding = dy > 1.2 && !t.onGround;
         if (t.visible && me.snowballs > 0 && snowCooldown == 0 && dist > 6 && dist < 24
-                && rng.nextDouble() < snowChance(adapt, targetBuilding) * jitterSnow) {
+                && chance(snowChance(adapt, targetBuilding) * jitterSnow * ranged)) {
             startSnowball(1 + rng.nextInt(3));
             return;
         }
         setMode(t.visible && dist < 7 ? Mode.MELEE : Mode.CHASE);
+    }
+
+    /** After a throw or a cast: back to defending if it still should, otherwise the fight. */
+    private void afterItem() {
+        setMode(defense >= 0.45 ? Mode.RETREAT : Mode.CHASE);
+    }
+
+    /** How fast the player is closing in (blocks per tick, from what it saw). */
+    private double closingSpeed(Self me) {
+        double dx = me.x - lastTx;
+        double dz = me.z - lastTz;
+        double d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 1e-6 || Double.isNaN(d)) return 0;
+        return (tvx * dx + tvz * dz) / d;
     }
 
     // ---- Chasing across the map.
@@ -570,7 +755,7 @@ public final class PvpBrain {
         int fz = floor(me.z);
         boolean moved = Double.isNaN(planGoalX) || Math.abs(planGoalX - t.x) + Math.abs(planGoalZ - t.z) > 2;
         if (--replanTimer <= 0 || moved || pathIndex >= path.size()) {
-            replanTimer = 6;
+            replanTimer = tempo.vary(tempo.replanTicks(), rng, 2);
             PathFinder.Node start = paths.ground(fx, fy, fz);
             PathFinder.Node goal = paths.ground(floor(t.x), (int) Math.round(t.y), floor(t.z));
             if (goal == null) goal = new PathFinder.Node(floor(t.x), (int) Math.round(t.y), floor(t.z));
@@ -596,7 +781,7 @@ public final class PvpBrain {
             break;
         }
         float moveYaw = (float) yawTo(me.x, me.z, gx, gz);
-        c.yaw = turnToward(me.yaw, moveYaw, turnRate());
+        c.yaw = turnYaw(me.yaw, moveYaw);
         c.pitch = approach(me.pitch, 5f, 10f);
         steer(c, moveYaw, 1f);
         c.sprint = true;
@@ -614,6 +799,7 @@ public final class PvpBrain {
         if (wtapTicks > 0) {
             wtapTicks--;
             forward = 0f; // release W: the next hit is a sprint hit again
+            keyRelease = true;
         } else if (dist > range + 0.5 || mistake(0) || (recoverTicks > 0 && dist > range)) {
             forward = 1f; // close in (or, overcommitting, walk right into them)
         } else if (dist < range - 0.7) {
@@ -625,7 +811,7 @@ public final class PvpBrain {
         boolean theyRush = sidestepRush && t.sprinting && facing(t, me) < 25 && dist > 3.1 && dist < 4.6;
         if (--strafeTimer <= 0) {
             // Fairly regular switches with a favourite side: readable, and so counterable.
-            strafeTimer = (int) (strafeTicks() * (0.85 + rng.nextDouble() * 0.3));
+            strafeTimer = (int) (strafeTicks() * tempo.strafeIntervalMul() * (0.85 + rng.nextDouble() * 0.3));
             double sameSide = 0.5 * sideBias + 0.5 * (0.5 + (profile.strafeLeft - 0.5) * diff.adaptWeight());
             strafeDir = rng.nextDouble() < sameSide ? 1 : -1;
             sidestepRush = rng.nextDouble() < 0.45 + 0.35 * diff.skill();
@@ -704,32 +890,163 @@ public final class PvpBrain {
 
     /**
      * Ticks from "in reach" to the first swing, on top of the perception lag
-     * ({@link #reaction()}): about 100-300 ms, a little quicker at higher skill,
-     * varied, and shorter against an opponent it was fighting a moment ago.
+     * ({@link #reaction()}): about 300-500 ms on Easy down to 100-150 ms on
+     * Expert, varied, and shorter against an opponent it was fighting a moment ago.
      */
     int firstSwingDelay(boolean recent) {
-        double base = 4.6 - 2.0 * diff.skill(); // ~3.9 at 0.35, ~2.8 at 0.88
+        double base = tempo.firstSwingTicks() * tempo.focus(); // ~6.4 on Easy, ~2.5 on Expert
         if (recent) base *= 0.5;
         int d = (int) Math.round(base + (rng.nextDouble() * 2.0 - 0.5) * (recent ? 0.6 : 1.0));
-        return Math.max(1, Math.min(7, d));
+        return Math.max(1, Math.min(10, d));
     }
 
+    /**
+     * Defensive fighting when it is losing: it stays in the fight and inside the
+     * arena, holding just outside the player's reach, facing them and strafing
+     * hard, hitting back when they step in. When it is being comboed or rushed it
+     * may break away for a moment (a short sprint, curving away from the border),
+     * then turns back. How far it holds off grows with {@link #defense}.
+     */
     private void retreat(Self me, Target t, double dist, Controls c) {
         c.slot = Slot.SWORD;
-        // Run away from them, along the ground, glancing back to fight if they catch up.
-        if (dist < 2.8) {
-            melee(me, t, dist, c);
+        if (burstTicks > 0) {
+            burst(me, dist, c);
             return;
         }
-        double ax = me.x - (t.x - me.x) * 4;
-        double az = me.z - (t.z - me.z) * 4;
-        float away = (float) yawTo(me.x, me.z, ax, az);
-        c.yaw = turnToward(me.yaw, away, turnRate());
+        boolean rushed = t.visible && t.sprinting && facing(t, me) < 30 && dist < 4;
+        if (burstCooldown == 0 && defense > 0.7 && (hitsInRow >= 2 || rushed)) {
+            float yaw = escapeYaw(me, t);
+            if (!Float.isNaN(yaw)) {
+                burstTicks = 14 + rng.nextInt(10);
+                burstYaw = yaw;
+                burstCooldown = 60 + rng.nextInt(40);
+                hitsInRow = 0;
+                burst(me, dist, c);
+                return;
+            }
+        }
+        if (dist <= REACH + 0.35 && t.visible) {
+            // They came in: hit back, without walking further into them.
+            melee(me, t, dist, c);
+            if (c.forward > 0.3f) c.forward = 0.3f;
+            c.sprint = false;
+            return;
+        }
+        aimAt(me, t, c, true);
+        double hold = REACH + 0.6 + 1.2 * defense;
+        float forward;
+        if (dist < hold - 0.4) forward = -1f;
+        else if (dist > hold + 2.0) forward = 0.8f;
+        else if (dist > hold + 0.6) forward = 0.4f;
+        else forward = 0f;
+        if (--strafeTimer <= 0) {
+            strafeTimer = Math.max(4, (int) (strafeTicks() * tempo.strafeIntervalMul() * (1 - 0.35 * defense)
+                    * (0.8 + rng.nextDouble() * 0.4)));
+            if (rng.nextDouble() < 0.65) strafeDir = -strafeDir;
+        }
+        c.forward = forward;
+        c.strafe = strafeDir;
+        c.sprint = forward >= 0.8f;
+        if (me.onGround && me.collided) c.jump = true;
+    }
+
+    /** A short sprint away along the chosen line, ending early when far enough or short of room. */
+    private void burst(Self me, double dist, Controls c) {
+        burstTicks--;
+        c.yaw = turnYaw(me.yaw, burstYaw);
         c.pitch = approach(me.pitch, 0f, 10f);
-        steer(c, away, 1f);
+        steer(c, burstYaw, 1f);
         c.sprint = true;
         if (me.onGround && me.collided) c.jump = true;
-        if (me.health >= 14 || dist > 16 || targetHealth <= me.health) setMode(Mode.CHASE);
+        if (dist > 7.5 || edgeDistance(me.x, me.z) < 4) burstTicks = 0;
+    }
+
+    /**
+     * The best direction to break away in: away from the player, or off to the
+     * side if that leads somewhere better, never toward the border, a drop or
+     * lava. NaN when there is nowhere sensible to go.
+     */
+    private float escapeYaw(Self me, Target t) {
+        float away = (float) yawTo(t.x, t.z, me.x, me.z);
+        float best = Float.NaN;
+        double bestScore = -1e9;
+        int fy = (int) Math.floor(me.y + 0.01);
+        for (int i = 0; i < 12; i++) {
+            float off = -110f + i * 20f;
+            float yaw = away + off;
+            double r = Math.toRadians(yaw);
+            double sx = -Math.sin(r);
+            double sz = Math.cos(r);
+            boolean ok = true;
+            for (int step = 2; step <= 6 && ok; step += 2) {
+                double px = me.x + sx * step;
+                double pz = me.z + sz * step;
+                if (edgeDistance(px, pz) < 5) ok = false;
+                int bx = floor(px);
+                int bz = floor(pz);
+                if (!terrain.open(bx, fy, bz) || !terrain.open(bx, fy + 1, bz)) ok = false; // a wall
+                else if (terrain.hazard(bx, fy - 1, bz) || terrain.hazard(bx, fy, bz)) ok = false;
+                else if (terrain.open(bx, fy - 1, bz) && terrain.open(bx, fy - 2, bz) && terrain.open(bx, fy - 3, bz)) ok = false; // a drop
+            }
+            if (!ok) continue;
+            double end = edgeDistance(me.x + sx * 6, me.z + sz * 6);
+            double score = Math.cos(Math.toRadians(off)) + 0.3 * Math.min(end, 20) / 20 + rng.nextDouble() * 0.15;
+            if (score > bestScore) {
+                bestScore = score;
+                best = yaw;
+            }
+        }
+        return best;
+    }
+
+    /** Distance to the nearest arena edge (infinite when the arena isn't known). */
+    double edgeDistance(double x, double z) {
+        if (Double.isNaN(arenaMinX)) return Double.POSITIVE_INFINITY;
+        return Math.min(Math.min(x - arenaMinX, arenaMaxX - x), Math.min(z - arenaMinZ, arenaMaxZ - z));
+    }
+
+    /**
+     * Near the border, take out the part of the movement that heads outward (and
+     * nudge inward right at it), whatever it is doing. The look direction is
+     * unchanged; only the movement keys are.
+     */
+    private void keepInside(Self me, Controls c) {
+        if (Double.isNaN(arenaMinX)) return;
+        double nx = 0;
+        double nz = 0;
+        double ex1 = me.x - arenaMinX;
+        double ex2 = arenaMaxX - me.x;
+        double ez1 = me.z - arenaMinZ;
+        double ez2 = arenaMaxZ - me.z;
+        if (ex1 < EDGE_MARGIN) nx += (EDGE_MARGIN - ex1) / EDGE_MARGIN;
+        if (ex2 < EDGE_MARGIN) nx -= (EDGE_MARGIN - ex2) / EDGE_MARGIN;
+        if (ez1 < EDGE_MARGIN) nz += (EDGE_MARGIN - ez1) / EDGE_MARGIN;
+        if (ez2 < EDGE_MARGIN) nz -= (EDGE_MARGIN - ez2) / EDGE_MARGIN;
+        double w = Math.sqrt(nx * nx + nz * nz);
+        if (w < 1e-6) return;
+        nx /= w;
+        nz /= w;
+        // World-space movement from the keys (vanilla moveFlying).
+        double yr = Math.toRadians(c.yaw);
+        double sin = Math.sin(yr);
+        double cos = Math.cos(yr);
+        double mx = c.strafe * cos - c.forward * sin;
+        double mz = c.forward * cos + c.strafe * sin;
+        double outward = -(mx * nx + mz * nz);
+        if (outward > 0) {
+            double k = outward * Math.min(1, w * 1.5);
+            mx += nx * k;
+            mz += nz * k;
+        }
+        if (w > 0.6) {
+            mx += nx * 0.4 * w;
+            mz += nz * 0.4 * w;
+        }
+        float f = (float) (mz * cos - mx * sin);
+        float st = (float) (mx * cos + mz * sin);
+        c.forward = Math.max(-1f, Math.min(1f, f));
+        c.strafe = Math.max(-1f, Math.min(1f, st));
+        if (c.forward < 0.8f) c.sprint = false;
     }
 
     // ---- Fishing rod.
@@ -774,7 +1091,7 @@ public final class PvpBrain {
     private void endRod(Controls c) {
         rodCooldown = (int) (40 + rng.nextInt(50) / Math.max(0.5, style == Playstyle.AGGRESSIVE ? 1.3 : 1.0));
         rodCast = false;
-        setMode(Mode.CHASE);
+        afterItem();
         c.slot = Slot.SWORD;
     }
 
@@ -790,7 +1107,7 @@ public final class PvpBrain {
         moveWhileUsing(me, t, dist, c);
         if (me.snowballs <= 0 || snowBurst <= 0 || modeTicks > 40 || dist < 3.2) {
             snowCooldown = 25 + rng.nextInt(45);
-            setMode(Mode.CHASE);
+            afterItem();
             c.slot = Slot.SWORD;
             return;
         }
@@ -862,7 +1179,8 @@ public final class PvpBrain {
         if (snowAfterTower && t.visible && me.snowballs > 0 && dist > 3.2 && dist < 20) {
             startSnowball(2 + rng.nextInt(2));
         } else {
-            setMode(t.visible && dist < 6 ? Mode.MELEE : Mode.CHASE);
+            if (defense >= 0.45) setMode(Mode.RETREAT);
+            else setMode(t.visible && dist < 6 ? Mode.MELEE : Mode.CHASE);
         }
         snowAfterTower = false;
         c.slot = Slot.SWORD;
@@ -909,7 +1227,7 @@ public final class PvpBrain {
             break;
         }
         if (me.planks <= 0 || wallIndex >= wallCount || modeTicks > 40) {
-            setMode(retreatAfterWall ? Mode.RETREAT : Mode.MELEE);
+            setMode(retreatAfterWall || defense >= 0.45 ? Mode.RETREAT : Mode.MELEE);
             retreatAfterWall = false;
             c.slot = Slot.SWORD;
             return;
@@ -945,7 +1263,7 @@ public final class PvpBrain {
         if (stairBackoff > 0) {
             // Too close to the spot (the block would go into itself): step back a little.
             stairBackoff--;
-            c.yaw = turnToward(me.yaw, stairYaw(), turnRate());
+            c.yaw = turnYaw(me.yaw, stairYaw());
             c.forward = -0.4f;
             return;
         }
@@ -974,7 +1292,7 @@ public final class PvpBrain {
         }
         // The step is there: jump onto it.
         float yaw = stairYaw();
-        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.yaw = turnYaw(me.yaw, yaw);
         c.pitch = approach(me.pitch, 20f, turnRate());
         steer(c, yaw, 1f);
         if (me.onGround) c.jump = true;
@@ -1018,7 +1336,7 @@ public final class PvpBrain {
         }
         // Walk onto the new plank (slowly, no sprint).
         float yaw = stairYaw();
-        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.yaw = turnYaw(me.yaw, yaw);
         c.pitch = approach(me.pitch, 60f, turnRate());
         steer(c, yaw, 0.6f);
     }
@@ -1058,7 +1376,7 @@ public final class PvpBrain {
         double ez = z + 0.5 - me.z;
         float yaw = (float) yawTo(me.x, me.z, x + 0.5, z + 0.5);
         float pitch = (float) -Math.toDegrees(Math.atan2(ey, Math.sqrt(ex * ex + ez * ez)));
-        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.yaw = turnYaw(me.yaw, yaw);
         c.pitch = approach(me.pitch, pitch, turnRate());
         if (placeCooldown > 0 || Math.sqrt(ex * ex + ey * ey + ez * ez) > PLACE_REACH) return false;
         if (Math.abs(wrap(c.yaw - yaw)) < 20 && Math.abs(c.pitch - pitch) < 20) {
@@ -1066,7 +1384,7 @@ public final class PvpBrain {
             c.px = x;
             c.py = y;
             c.pz = z;
-            placeCooldown = 2 + rng.nextInt(2); // a quick right-click rate
+            placeCooldown = 2 + rng.nextInt(2) + tempo.vary(tempo.placeGapTicks(), rng, 0); // right-click rate, plus picking the next spot
             return true;
         }
         return false;
@@ -1091,7 +1409,7 @@ public final class PvpBrain {
         double ddx = px - me.x;
         double ddz = pz - me.z;
         float pitch = (float) -Math.toDegrees(Math.atan2(py - (me.y + EYE), Math.sqrt(ddx * ddx + ddz * ddz)));
-        c.yaw = turnToward(me.yaw, yaw, turnRate());
+        c.yaw = turnYaw(me.yaw, yaw);
         c.pitch = approach(me.pitch, pitch, turnRate());
     }
 
@@ -1113,7 +1431,7 @@ public final class PvpBrain {
         float yaw = (float) yawTo(me.x, me.z, px, pz);
         float pitch = shot == null ? me.pitch : shot.pitch;
         double noise = aimNoise() * (rng.nextDouble() - 0.5) * 0.4;
-        c.yaw = turnToward(me.yaw, (float) (yaw + noise), turnRate());
+        c.yaw = turnYaw(me.yaw, (float) (yaw + noise));
         c.pitch = approach(me.pitch, pitch, turnRate());
         return shot;
     }
@@ -1149,9 +1467,9 @@ public final class PvpBrain {
         return style == Playstyle.AGGRESSIVE ? 3 : (style == Playstyle.DEFENSIVE ? 8 : 6);
     }
 
-    /** Ticks between seeing something and acting on it: 200 ms down to 50 ms. */
+    /** Ticks between seeing something and acting on it: ~350 ms on Easy down to 50-100 ms on Expert. */
     int reaction() {
-        return (int) Math.round(4 - 3 * diff.skill());
+        return perceptionDelay;
     }
 
     /** Aim wander, a little wider than the Sumo opponent's; much wider during a sloppy moment. */
@@ -1245,13 +1563,6 @@ public final class PvpBrain {
         if (a >= 180f) a -= 360f;
         if (a < -180f) a += 360f;
         return a;
-    }
-
-    private static float turnToward(float from, float to, float max) {
-        float d = wrap(to - from);
-        if (d > max) d = max;
-        if (d < -max) d = -max;
-        return from + d;
     }
 
     private static float approach(float from, float to, float max) {
