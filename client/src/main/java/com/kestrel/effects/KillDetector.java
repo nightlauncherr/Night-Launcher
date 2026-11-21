@@ -44,6 +44,8 @@ public final class KillDetector {
     static final long COOLDOWN_MS = 6000;
     /** Other players this close to the victim count as possible attackers. */
     private static final double FOREIGN_RADIUS = 6.0;
+    /** A chat-confirmed kill without your melee hit plays only for players this close to you. */
+    private static final double UNTRACKED_RANGE = 64.0;
 
     private static final class Target {
         final int entityId;
@@ -143,10 +145,10 @@ public final class KillDetector {
 
     @SubscribeEvent
     public void onChat(ClientChatReceivedEvent event) {
-        if (event.type == 2 || targets.isEmpty()) return; // 2 = action bar
+        if (event.type == 2) return; // 2 = action bar
         ClientConfig.KillEffects cfg = client.config().killEffects;
         Minecraft mc = Minecraft.getMinecraft();
-        if (!cfg.enabled || !cfg.chatDetection || mc.thePlayer == null || event.message == null) return;
+        if (!cfg.enabled || !cfg.chatDetection || mc.thePlayer == null || mc.theWorld == null || event.message == null) return;
         String text = event.message.getUnformattedText();
         String self = mc.thePlayer.getName();
         long now = System.currentTimeMillis();
@@ -154,8 +156,44 @@ public final class KillDetector {
             if (!tg.fired && now - tg.attribution.lastOwnHitMs() <= CHAT_WINDOW_MS
                     && KillMessageMatcher.isKillMessage(text, self, tg.name)) {
                 fire(tg, now);
+                return;
             }
         }
+        // A kill you made without a melee hit (bow, rod or snowball knock-off): the
+        // server's line still names you as the killer. Play it where that player is.
+        String victim = KillMessageMatcher.victimOf(text, self);
+        if (victim == null) return;
+        for (Target tg : targets.values()) {
+            if (victim.equals(tg.name)) return; // that kill was already handled above (or ignored there)
+        }
+        EntityPlayer p = mc.theWorld.getPlayerEntityByName(victim);
+        if (p == null || p == mc.thePlayer) return; // no position to show it at (out of view, or already removed)
+        double dx = p.posX - mc.thePlayer.posX;
+        double dz = p.posZ - mc.thePlayer.posZ;
+        if (dx * dx + dz * dz > UNTRACKED_RANGE * UNTRACKED_RANGE) return;
+        Target tg = new Target(p.getEntityId(), victim);
+        tg.x = p.posX;
+        // Knocked into the void: show it near the edge they went over, not far below you.
+        tg.y = Math.max(p.posY, mc.thePlayer.posY - 12.0);
+        tg.z = p.posZ;
+        fire(tg, now);
+    }
+
+    /**
+     * A practice-mode opponent (Sumo or Open Map Night Bot) that the local
+     * player just beat. Called on the server thread of the integrated server;
+     * the effect is played on the client thread, once per round.
+     */
+    public static void practiceKill(final double x, final double y, final double z) {
+        final Minecraft mc = Minecraft.getMinecraft();
+        mc.addScheduledTask(new Runnable() {
+            @Override
+            public void run() {
+                KestrelClient c = com.kestrel.KestrelMod.client();
+                if (c == null || mc.theWorld == null) return;
+                c.killEffects().trigger(x, y, z);
+            }
+        });
     }
 
     @SubscribeEvent

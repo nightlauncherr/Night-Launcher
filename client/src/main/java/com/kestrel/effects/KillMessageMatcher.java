@@ -12,6 +12,10 @@ import java.util.Locale;
  * wording makes you the killer:
  * <ul>
  *   <li>victim first, then "... by &lt;you&gt;" ("Steve was slain by Kellen");</li>
+ *   <li>victim first, then "... to / with / from / against &lt;you&gt;" ending the
+ *   sentence (Hypixel: "Steve died in close combat to Kellen.", "Steve fought
+ *   to the edge with Kellen.", "Steve was hit off by a love bomb from Kellen.");</li>
+ *   <li>victim first, killer as a possessive ("Steve was Kellen's final #12. FINAL KILL!");</li>
  *   <li>you first, then an active kill verb and the victim ("Kellen killed Steve").</li>
  * </ul>
  * "You were slain by the victim", assists ("... assisted by you"), other
@@ -26,7 +30,60 @@ public final class KillMessageMatcher {
             "struck down", "has killed", "final killed",
     };
 
+    /** Words that, right before your name, make you the one the victim died to (besides "by"). */
+    private static final String[] PASSIVE_CONNECTORS = {"to", "with", "from", "against"};
+
     private KillMessageMatcher() {
+    }
+
+    /**
+     * The victim a kill-feed line names, when the line makes you the killer:
+     * the first word of the line (kill feeds put the victim first), or the
+     * victim of a "you killed X" line. Null when the line is not your kill.
+     */
+    public static String victimOf(String message, String self) {
+        if (message == null || self == null || self.isEmpty()) return null;
+        String m = stripFormatting(message).trim();
+        if (looksLikePlayerChat(m)) return null;
+        String first = firstName(m);
+        // Kill feeds read "<victim> was/died/fought ...": a lowercase word follows the
+        // name (not a header like "BED DESTRUCTION > ...").
+        if (first != null && !first.equals(self) && lowercaseWordAfter(m, first) && isKillMessage(m, self, first)) return first;
+        int si = wordIndex(m, self);
+        if (si == 0) {
+            // "<you> <verb> <victim>": the last name-like word after the verb.
+            String rest = m.substring(self.length());
+            String[] words = rest.split("[^A-Za-z0-9_]+");
+            for (int i = words.length - 1; i >= 0; i--) {
+                String w = words[i];
+                if (isName(w) && !w.equals(self) && isKillMessage(m, self, w)) return w;
+            }
+        }
+        return null;
+    }
+
+    private static boolean lowercaseWordAfter(String m, String name) {
+        int i = wordIndex(m, name) + name.length();
+        while (i < m.length() && m.charAt(i) == ' ') i++;
+        return i < m.length() && Character.isLowerCase(m.charAt(i));
+    }
+
+    private static String firstName(String m) {
+        int i = 0;
+        while (i < m.length() && !isNameChar(m.charAt(i))) i++;
+        int j = i;
+        while (j < m.length() && isNameChar(m.charAt(j))) j++;
+        String w = m.substring(i, j);
+        return isName(w) ? w : null;
+    }
+
+    /** A Minecraft account name: 3-16 letters, digits or underscores. */
+    static boolean isName(String w) {
+        if (w == null || w.length() < 3 || w.length() > 16) return false;
+        for (int i = 0; i < w.length(); i++) {
+            if (!isNameChar(w.charAt(i))) return false;
+        }
+        return true;
     }
 
     /** Strip legacy section-sign colour codes. */
@@ -58,12 +115,29 @@ public final class KillMessageMatcher {
         int si = wordIndex(m, self);
         if (vi < 0 || si < 0) return false;
         if (vi < si) {
-            // "<victim> ... by <you>": the words right before your name must be "by",
-            // and not "assisted by" / "assist by".
             String before = m.substring(vi + victim.length(), si).toLowerCase(Locale.ROOT).trim();
-            if (!endsWithWord(before, "by")) return false;
-            String head = before.substring(0, before.length() - 2).trim();
-            return !(endsWithWord(head, "assisted") || endsWithWord(head, "assist") || endsWithWord(head, "and"));
+            String after = m.substring(si + self.length());
+            if (before.contains("assist")) return false;
+            // "<victim> ... by <you>": the word right before your name is "by"
+            // (not "assisted by" / "and").
+            if (endsWithWord(before, "by")) {
+                String head = before.substring(0, before.length() - 2).trim();
+                return !endsWithWord(head, "and");
+            }
+            // "<victim> was <you>'s final #12": you, as a possessive, right after "was".
+            if (after.startsWith("'s ") || after.startsWith("\u2019s ")) {
+                return before.equals("was") || before.equals("were") || before.equals("is");
+            }
+            // "<victim> died in close combat to <you>." and similar: a connector right
+            // before your name, and the sentence ends with you (no other player after).
+            for (String c : PASSIVE_CONNECTORS) {
+                if (endsWithWord(before, c)) {
+                    String head = before.substring(0, before.length() - c.length()).trim();
+                    if (endsWithWord(head, "and") || " ".concat(head).contains(" and ")) return false;
+                    return endsSentence(after);
+                }
+            }
+            return false;
         }
         // "<you> ... <victim>": active voice only ("you killed victim"), never
         // "you were killed by victim".
@@ -76,6 +150,19 @@ public final class KillMessageMatcher {
             if (between.contains(" " + verb + " ") || between.trim().equals(verb)) return true;
         }
         return false;
+    }
+
+    /**
+     * What follows the killer's name is only the end of the sentence: punctuation,
+     * "FINAL KILL!", or a bracketed note ("[5 coins]", "(x2)"); no further words.
+     */
+    static boolean endsSentence(String after) {
+        String t = after.replaceAll("(?i)final kill!?", " ").replaceAll("\\[[^\\]]*\\]|\\([^)]*\\)", " ");
+        for (int i = 0; i < t.length(); i++) {
+            char ch = t.charAt(i);
+            if (Character.isLetter(ch)) return false;
+        }
+        return true;
     }
 
     static boolean looksLikePlayerChat(String m) {

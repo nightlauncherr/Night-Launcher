@@ -331,7 +331,11 @@ final class SumoSession {
                 boolean playerOut = player.posY < lose;
                 boolean botOut = bot.posY < lose;
                 if (playerOut && botOut) endMatch(SumoStats.Result.DRAW);
-                else if (botOut) endMatch(SumoStats.Result.WIN);
+                else if (botOut) {
+                    // Knocked off: your kill effect where it went over, at platform height.
+                    com.kestrel.effects.KillDetector.practiceKill(bot.posX, Math.min(layout.playerSpawn.y, layout.aiSpawn.y), bot.posZ);
+                    endMatch(SumoStats.Result.WIN);
+                }
                 else if (playerOut) endMatch(SumoStats.Result.LOSS);
                 else if (fightTicks >= MAX_FIGHT_TICKS) endMatch(SumoStats.Result.DRAW);
                 break;

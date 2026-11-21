@@ -452,7 +452,10 @@ final class OpenMapSession {
         }
         if (victim == bot) {
             bot.setHealth(bot.getMaxHealth());
-            if (phase == Phase.FIGHT) endMatch(SumoStats.Result.WIN);
+            if (phase == Phase.FIGHT) {
+                com.kestrel.effects.KillDetector.practiceKill(bot.posX, bot.posY, bot.posZ); // your kill effect
+                endMatch(SumoStats.Result.WIN);
+            }
             return true;
         }
         return false;
