@@ -34,9 +34,8 @@ import java.io.IOException;
  * ({@link EntranceAnimation}); coming back from a screen opened here (worlds,
  * servers, options, skin) keeps it standing.
  *
- * <p>Above the wordmark a splash text gently pulses, like vanilla's splash. Once
- * the character stands, it can be dragged with the left mouse button to turn it
- * all the way round and tilt the view ({@link ModelOrbit}).
+ * <p>Once the character stands, it can be dragged with the left mouse button to
+ * turn it all the way round and tilt the view ({@link ModelOrbit}).
  *
  * <p>Every animation runs on wall-clock time, so it looks the same at any frame
  * rate. Navigation opens the normal Minecraft/Forge screens.
@@ -53,12 +52,6 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             "Singleplayer", "Multiplayer", "Realms", "Mods", "Minecraft Settings", "Night Settings", "Quit Game"};
     private static final int SINGLE = 0, MULTI = 1, REALMS = 2, MODS = 3, OPTIONS = 4, KESTREL = 5, QUIT = 6;
     private static final float LEAVE_SECONDS = 0.16f;
-    /** Splash text above the wordmark, its base scale, pulse (fraction of the size) and period (s). */
-    private static final String SPLASH = "CODE \"LOVEMOJANG\"";
-    private static final float SPLASH_SCALE = 1.3f;
-    private static final float SPLASH_PULSE = 0.05f;
-    private static final float SPLASH_PERIOD = 1.4f;
-    private static final int SPLASH_COLOR = 0xD9C4FF;
 
     private final KestrelClient client;
     private final SkinManager skins;
@@ -92,7 +85,6 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
     private String footerLeft;
     private int footerLeftWidth;
     private int footerRightWidth;
-    private int splashWidth;
     private int leaving = -1;
     private long leaveNanos;
 
@@ -141,7 +133,6 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         footerLeft = "Night " + client.version();
         footerLeftWidth = fontRendererObj.getStringWidth(footerLeft);
         footerRightWidth = fontRendererObj.getStringWidth(FOOTER_RIGHT);
-        splashWidth = fontRendererObj.getStringWidth(SPLASH);
     }
 
     private static final String FOOTER_RIGHT = "Copyright Mojang AB. Do not distribute!";
@@ -336,7 +327,6 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
         MenuBackground.draw(width, height, time, ribbons, charX, feetY - charScale, charScale * 1.9f);
 
         drawMark(splash, time, e);
-        if (!splash) drawCodeSplash(time, e);
         if (splash) {
             drawSplashHint(time);
         } else {
@@ -414,29 +404,6 @@ public final class KestrelMainMenu extends GuiScreen implements FullFrameRateScr
             float subX = tx + (ww * textScale - spacedWidth(sub, 1)) * (1f - move) / 2f;
             drawSpaced(sub, Math.round(subX), Math.round(ty + 9 * textScale + 4), argb(Theme.ACCENT, alpha * 0.9f), 1);
         }
-    }
-
-    /**
-     * The splash text, centred over the wordmark and kept above the mark, pulsing
-     * smoothly (a sine of wall-clock time) around its centre like vanilla's splash.
-     */
-    private void drawCodeSplash(float time, float e) {
-        float a = withSplash ? easeOut((e - 0.6f) / 0.5f) : easeOut((e - 0.2f) / 0.5f);
-        if (a < 0.03f) return;
-        float phase = (time % SPLASH_PERIOD) / SPLASH_PERIOD * (float) (Math.PI * 2.0);
-        float s = SPLASH_SCALE * (1f + SPLASH_PULSE * (float) Math.sin(phase));
-        float maxS = SPLASH_SCALE * (1f + SPLASH_PULSE);
-        float halfH = 4.5f * maxS;
-        float halfW = splashWidth * maxS / 2f;
-        float cx = markX + markSize + 10f + spacedWidth("NIGHT", 2); // centre of the 2x wordmark
-        cx = clamp(cx, 4f + halfW, width - 4f - halfW);
-        float cy = Math.max(markY - 4f - halfH, 3f + halfH);
-        GlStateManager.pushMatrix();
-        GlStateManager.translate(cx, cy, 0f);
-        GlStateManager.scale(s, s, 1f);
-        GlStateManager.enableBlend();
-        fontRendererObj.drawString(SPLASH, -splashWidth / 2f, -4f, argb(SPLASH_COLOR, a), true);
-        GlStateManager.popMatrix();
     }
 
     private void drawSplashHint(float time) {
