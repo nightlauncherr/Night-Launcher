@@ -403,6 +403,15 @@ public class EntityPvpBot extends EntityLivingBase {
     }
 
     /** A player-type hit (never scaled by the world's difficulty, like a player's). */
+    /**
+     * Whether {@code player} hit this bot in the last five seconds (melee, or
+     * a projectile they shot): the kill credit vanilla uses for loot and XP.
+     * A bot that dies or falls with no such hit was not killed by the player.
+     */
+    public boolean recentlyHitBy(net.minecraft.entity.player.EntityPlayer player) {
+        return player != null && recentlyHit > 0 && attackingPlayer == player;
+    }
+
     static final class BotDamage extends EntityDamageSource {
         BotDamage(Entity bot) {
             super("player", bot);

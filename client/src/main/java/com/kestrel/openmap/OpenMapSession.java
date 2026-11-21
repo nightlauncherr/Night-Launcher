@@ -453,7 +453,8 @@ final class OpenMapSession {
         if (victim == bot) {
             bot.setHealth(bot.getMaxHealth());
             if (phase == Phase.FIGHT) {
-                com.kestrel.effects.KillDetector.practiceKill(bot.posX, bot.posY, bot.posZ); // your kill effect
+                // Your kill effect, only when you killed it (not a fall or /kill with no hit of yours).
+                if (bot.recentlyHitBy(player)) com.kestrel.effects.KillDetector.practiceKill(bot.posX, bot.posY, bot.posZ);
                 endMatch(SumoStats.Result.WIN);
             }
             return true;

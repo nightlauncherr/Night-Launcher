@@ -66,6 +66,8 @@ public final class TileGrid extends Widget {
     private int gridY;
     private int cols = 1;
     private boolean searchFocused;
+    /** Ctrl+A in the search box: the next key replaces the whole query. */
+    private boolean searchAllSelected;
 
     public TileGrid(List<Item> items, List<String[]> categories, Supplier<String> selected, Consumer<String> select,
                     Painter painter, Filter filter, int picW, int picH) {
@@ -143,7 +145,11 @@ public final class TileGrid extends Widget {
         if (text.isEmpty() && !searchFocused) {
             mc.fontRendererObj.drawString("Search " + items.size() + " items...", x + 5, sy + 3, Theme.MUTED, false);
         } else {
-            mc.fontRendererObj.drawString(fit(mc, text, w - 16) + (caret ? "_" : ""), x + 5, sy + 3, Theme.TEXT, false);
+            String shown = fit(mc, text, w - 16);
+            if (searchAllSelected && searchFocused) {
+                RenderUtil.softRect(x + 4, sy + 2, x + 6 + mc.fontRendererObj.getStringWidth(shown), sy + SEARCH_H - 2, Theme.ACCENT);
+            }
+            mc.fontRendererObj.drawString(shown + (caret ? "_" : ""), x + 5, sy + 3, Theme.TEXT, false);
         }
         String count = visible.size() + "/" + items.size();
         mc.fontRendererObj.drawString(count, x + w - mc.fontRendererObj.getStringWidth(count) - 5, sy + 3, Theme.MUTED, false);
@@ -174,6 +180,7 @@ public final class TileGrid extends Widget {
 
     @Override
     public boolean mouseClicked(int mx, int my, int button) {
+        searchAllSelected = false;
         if (button != 0 || !isHovered(mx, my)) {
             searchFocused = false;
             return false;
@@ -214,15 +221,24 @@ public final class TileGrid extends Widget {
         if (!searchFocused) return false;
         if (key == Keyboard.KEY_ESCAPE || key == Keyboard.KEY_RETURN) {
             searchFocused = false;
+            searchAllSelected = false;
+            return true;
+        }
+        boolean ctrl = Keyboard.isKeyDown(Keyboard.KEY_LCONTROL) || Keyboard.isKeyDown(Keyboard.KEY_RCONTROL);
+        if (ctrl && key == Keyboard.KEY_A) {
+            // Select all: the next key replaces (or, for backspace, clears) the whole query.
+            searchAllSelected = !filter.search.isEmpty();
             return true;
         }
         if (key == Keyboard.KEY_BACK) {
-            if (!filter.search.isEmpty()) filter.search = filter.search.substring(0, filter.search.length() - 1);
-        } else if (c >= ' ' && c != 127 && c != '\u00a7' && filter.search.length() < 32) {
-            filter.search += c;
+            if (searchAllSelected || ctrl) filter.search = "";
+            else if (!filter.search.isEmpty()) filter.search = filter.search.substring(0, filter.search.length() - 1);
+        } else if (c >= ' ' && c != 127 && c != '\u00a7' && (searchAllSelected || filter.search.length() < 32)) {
+            filter.search = (searchAllSelected ? "" : filter.search) + c;
         } else {
             return true;
         }
+        searchAllSelected = false;
         relayout(Minecraft.getMinecraft(), w);
         return true;
     }

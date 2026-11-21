@@ -29,8 +29,8 @@ skies from any function of view direction (`render_atlas`).
 ## Bundled skies
 
 `client/src/main/resources/assets/kestrel/skies.json` lists the bundled skies (id, name,
-category); atlases are `textures/sky/<id>.png` (1024 px faces) and menu thumbnails (the
-north/east/south strip, 384x128) `textures/sky/thumbs/<id>.png`. The launcher embeds the same
+category); atlases are `textures/sky/<id>.png` (1024 px faces) and menu thumbnails (a
+384x128 panorama) `textures/sky/thumbs/<id>.png`. The launcher embeds the same
 file. Categories: Sunsets, Space, Clouds & Aurora, Dark, Abstract, Fantasy, Simple and Night;
 uploads are listed under Custom, and "Vanilla sky" turns the custom sky off. Switching applies
 immediately in game (no restart).

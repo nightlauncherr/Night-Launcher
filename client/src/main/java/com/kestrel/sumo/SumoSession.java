@@ -333,7 +333,10 @@ final class SumoSession {
                 if (playerOut && botOut) endMatch(SumoStats.Result.DRAW);
                 else if (botOut) {
                     // Knocked off: your kill effect where it went over, at platform height.
-                    com.kestrel.effects.KillDetector.practiceKill(bot.posX, Math.min(layout.playerSpawn.y, layout.aiSpawn.y), bot.posZ);
+                    // Only when you knocked it off (a hit of yours in the last five seconds).
+                    if (bot.recentlyHitBy(player)) {
+                        com.kestrel.effects.KillDetector.practiceKill(bot.posX, Math.min(layout.playerSpawn.y, layout.aiSpawn.y), bot.posZ);
+                    }
                     endMatch(SumoStats.Result.WIN);
                 }
                 else if (playerOut) endMatch(SumoStats.Result.LOSS);
