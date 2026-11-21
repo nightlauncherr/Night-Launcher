@@ -161,6 +161,7 @@ public final class ClientSettingsScreen extends GuiScreen {
     private SubTabs subTabs;
     private String title = "";
     private String presetLabel = "";
+    private String versionLabel = "";
 
     // ---- navigation
     private Category category = lastCategory;
@@ -320,7 +321,8 @@ public final class ClientSettingsScreen extends GuiScreen {
             title = category.label;
         }
         Preset p = Preset.byId(cfg().activePreset);
-        presetLabel = p != null ? p.label : "-";
+        presetLabel = "Preset: " + (p != null ? p.label : "-");
+        versionLabel = "v" + client.version();
         contentY = py + TOP_H + (subTabs != null ? 26 : 0);
         contentH = py + ph - 8 - contentY;
         if (subTabs != null) {
@@ -912,7 +914,7 @@ public final class ClientSettingsScreen extends GuiScreen {
         header("Sky settings");
         floatSlider("Brightness", 0.1f, 1f, 0.05f, () -> sk.brightness, v -> sk.brightness = v, "%.2f");
         toggle("Slow rotation (animated)", () -> sk.rotate, v -> sk.rotate = v);
-        floatSlider("Rotation speed", 0f, 5f, 0.1f, () -> sk.rotationSpeed, v -> sk.rotationSpeed = v, "%.1f deg/s");
+        floatSlider("Rotation speed", 0f, 5f, 0.1f, () -> sk.rotationSpeed, v -> sk.rotationSpeed = v, "%.1f\u00b0/s");
         toggle("Darken at night", () -> sk.followDayCycle, v -> sk.followDayCycle = v);
 
         header("Custom skies");
@@ -1414,7 +1416,7 @@ public final class ClientSettingsScreen extends GuiScreen {
         }
         if (!narrow) {
             f.drawString(Ui.fit(f, presetLabel, sideW - 20), px + 12, py + ph - 24, Theme.FAINT, false);
-            f.drawString(Ui.fit(f, "v" + client.version(), sideW - 20), px + 12, py + ph - 13, Theme.FAINT, false);
+            f.drawString(Ui.fit(f, versionLabel, sideW - 20), px + 12, py + ph - 13, Theme.FAINT, false);
         }
     }
 
@@ -1685,7 +1687,9 @@ public final class ClientSettingsScreen extends GuiScreen {
             return;
         }
         if (dragScrollbar) return;
-        scrollTarget = Math.max(0, Math.min(scrollTarget - dir * 36, maxScroll()));
+        // One notch is 120 on most mice; several notches can arrive as one event.
+        int notches = Math.max(1, Math.min(10, Math.abs(wheel) / 120));
+        scrollTarget = Math.max(0, Math.min(scrollTarget - dir * notches * 40, maxScroll()));
     }
 
     private boolean isOpenKey(int keyCode) {
@@ -1725,6 +1729,12 @@ public final class ClientSettingsScreen extends GuiScreen {
         }
         if (searchFocused) {
             searchKey(typedChar, keyCode, ctrl);
+            return;
+        }
+        if (ctrl && keyCode == Keyboard.KEY_BACK && focusedGrid() == null && searching()) {
+            // Clear the search even after clicking a result took the focus away.
+            searchFocused = true;
+            setQuery("");
             return;
         }
         TileGrid g = focusedGrid();
