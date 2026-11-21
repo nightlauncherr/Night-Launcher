@@ -1016,7 +1016,7 @@ impl CosmeticsPage {
                         self.custom_skies = cosmetics::list_custom(&self.layout, Kind::Sky);
                         if self.settings.sky.preset == id {
                             self.settings.sky.enabled = false;
-                            self.settings.sky.preset = "dusk".into();
+                            self.settings.sky.preset = cosmetics::DEFAULT_SKY.into();
                         }
                     }
                 }

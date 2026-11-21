@@ -116,7 +116,7 @@ public final class ClientConfig {
     public static final class Sky {
         public boolean enabled = false;
         /** Sky id: bundled preset id or "custom:<file name>". */
-        public String preset = "dusk";
+        public String preset = "golden_hour";
         public float brightness = 1.0f;
         public boolean rotate = true;
         /** Degrees per second when rotating. */
@@ -126,7 +126,7 @@ public final class ClientConfig {
 
         void validate() {
             if (preset == null || preset.isEmpty()) {
-                preset = "dusk";
+                preset = "golden_hour";
             }
             brightness = clamp(brightness, 0.1f, 1.0f);
             rotationSpeed = clamp(rotationSpeed, 0f, 10f);

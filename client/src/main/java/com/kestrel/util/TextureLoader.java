@@ -34,6 +34,19 @@ public final class TextureLoader {
         if (in == null) {
             throw new IOException("cannot open " + file.getName());
         }
+        return decodePng(in);
+    }
+
+    /** {@link #decodePng(File)} for bytes already read (e.g. a bundled resource). Call off the game thread. */
+    public static BufferedImage decodePng(byte[] png) throws IOException {
+        ImageInputStream in = ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(png));
+        if (in == null) {
+            throw new IOException("cannot read PNG data");
+        }
+        return decodePng(in);
+    }
+
+    private static BufferedImage decodePng(ImageInputStream in) throws IOException {
         try {
             Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("png");
             if (!readers.hasNext()) {
@@ -111,6 +124,16 @@ public final class TextureLoader {
             textureMapMissing = true;
             com.kestrel.KestrelMod.LOG.warn("[Kestrel] cannot access the texture map: {}", e.toString());
             return null;
+        }
+    }
+
+    /** The bytes of a resource (e.g. a bundled texture). Game thread (the resource manager isn't thread-safe). */
+    public static byte[] readResource(ResourceLocation loc) throws IOException {
+        java.io.InputStream in = Minecraft.getMinecraft().getResourceManager().getResource(loc).getInputStream();
+        try {
+            return org.apache.commons.io.IOUtils.toByteArray(in);
+        } finally {
+            in.close();
         }
     }
 

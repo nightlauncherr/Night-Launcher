@@ -160,7 +160,7 @@ test("stale timestamps and bad input are rejected", async () => {
   assert.equal(env.CAPES.m.size, 0);
 });
 
-test("unchanged cape does not write; none removes the entry", async () => {
+test("unchanged cape does not write; none hides the cape", async () => {
   const env = { CAPES: kv() };
   assert.equal((await put(env, UUID, await body(UUID, "glacier", { nonce: "e".repeat(32) }))).status, 204);
   assert.equal((await put(env, UUID, await body(UUID, "glacier", { nonce: "f".repeat(32) }))).status, 204);
@@ -168,6 +168,23 @@ test("unchanged cape does not write; none removes the entry", async () => {
   assert.deepEqual(await (await get(env, UUID)).json(), { capes: { [UUID]: "glacier" } });
   assert.equal((await put(env, UUID, await body(UUID, "none", { nonce: "1".repeat(32) }))).status, 204);
   assert.deepEqual(await (await get(env, UUID)).json(), { capes: {} });
+});
+
+test("a replayed older request can't undo a newer change", async () => {
+  const env = { CAPES: kv() };
+  const old = await body(UUID, "ember", { ts: NOW - 30, nonce: "2".repeat(32) });
+  assert.equal((await put(env, UUID, old)).status, 204);
+  assert.equal((await put(env, UUID, await body(UUID, "glacier", { nonce: "3".repeat(32) }))).status, 204);
+  // The first request again, still inside its two-minute window: ignored.
+  assert.equal((await put(env, UUID, old)).status, 204);
+  assert.deepEqual(await (await get(env, UUID)).json(), { capes: { [UUID]: "glacier" } });
+  // Same for a removal: the old request can't bring the cape back.
+  assert.equal((await put(env, UUID, await body(UUID, "none", { ts: NOW + 5, nonce: "4".repeat(32) }), NOW + 5)).status, 204);
+  assert.equal((await put(env, UUID, old, NOW + 5)).status, 204);
+  assert.deepEqual(await (await get(env, UUID)).json(), { capes: {} });
+  // A newer request still works.
+  assert.equal((await put(env, UUID, await body(UUID, "ember", { ts: NOW + 10, nonce: "5".repeat(32) }), NOW + 10)).status, 204);
+  assert.deepEqual(await (await get(env, UUID)).json(), { capes: { [UUID]: "ember" } });
 });
 
 test("lookup validates its input", async () => {

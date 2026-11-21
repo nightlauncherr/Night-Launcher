@@ -12,6 +12,7 @@ import net.minecraft.util.MathHelper;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.IRenderHandler;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 /**
  * Textured skybox installed through Forge's {@code WorldProvider#setSkyRenderer},
@@ -22,7 +23,7 @@ import org.lwjgl.opengl.GL11;
  * row 0: north, east, south; row 1: west, up, down. Side faces are oriented
  * "as seen from inside, standing upright", so a horizon drawn across the
  * middle of each side face lines up all around. The exact corner table below
- * is the format contract: tools/gen_assets.py samples each texel's 3D
+ * is the format contract: tools/skylib.py samples each texel's 3D
  * direction from the same table, which makes the bundled skies seamless.
  * Documented for custom skies in documentation/SKIES.md.
  */
@@ -58,6 +59,16 @@ public final class SkyboxRenderer extends IRenderHandler {
         GlStateManager.disableCull(); // we are inside the box; winding must not matter
         GlStateManager.enableTexture2D();
         mc.getTextureManager().bindTexture(tex);
+        // Smooth magnification (the faces are seen larger than their texels) and no
+        // wrap-around sampling at the atlas border.
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+        // Half a texel inside each atlas cell: filtering never blends in the neighbouring
+        // face, and faces still meet edge to edge (the generator samples texel centres).
+        double eu = 0.5 / Math.max(3, manager.textureWidth());
+        double ev = 0.5 / Math.max(2, manager.textureHeight());
 
         GlStateManager.pushMatrix();
         if (cfg.rotate && cfg.rotationSpeed > 0) {
@@ -71,17 +82,17 @@ public final class SkyboxRenderer extends IRenderHandler {
         // Each face: four corners as (x, y, z) with (u, v) in face space,
         // listed top-left, bottom-left, bottom-right, top-right as seen from inside.
         // north (-Z): right is +X
-        face(w, 0, 0, c, -R, R, -R, -R, -R, -R, R, -R, -R, R, R, -R);
+        face(w, 0, 0, c, eu, ev, -R, R, -R, -R, -R, -R, R, -R, -R, R, R, -R);
         // east (+X): right is +Z
-        face(w, 1, 0, c, R, R, -R, R, -R, -R, R, -R, R, R, R, R);
+        face(w, 1, 0, c, eu, ev, R, R, -R, R, -R, -R, R, -R, R, R, R, R);
         // south (+Z): right is -X
-        face(w, 2, 0, c, R, R, R, R, -R, R, -R, -R, R, -R, R, R);
+        face(w, 2, 0, c, eu, ev, R, R, R, R, -R, R, -R, -R, R, -R, R, R);
         // west (-X): right is -Z
-        face(w, 0, 1, c, -R, R, R, -R, -R, R, -R, -R, -R, -R, R, -R);
+        face(w, 0, 1, c, eu, ev, -R, R, R, -R, -R, R, -R, -R, -R, -R, R, -R);
         // up (+Y): image top edge at +Z, left edge at -X
-        face(w, 1, 1, c, -R, R, R, -R, R, -R, R, R, -R, R, R, R);
+        face(w, 1, 1, c, eu, ev, -R, R, R, -R, R, -R, R, R, -R, R, R, R);
         // down (-Y): image top edge at -Z, left edge at -X
-        face(w, 2, 1, c, -R, -R, -R, -R, -R, R, R, -R, R, R, -R, -R);
+        face(w, 2, 1, c, eu, ev, -R, -R, -R, -R, -R, R, R, -R, R, R, -R, -R);
         t.draw();
         GlStateManager.popMatrix();
 
@@ -92,17 +103,15 @@ public final class SkyboxRenderer extends IRenderHandler {
         GlStateManager.enableFog();
     }
 
-    private static void face(WorldRenderer w, int col, int row, int c,
+    private static void face(WorldRenderer w, int col, int row, int c, double eu, double ev,
                              double x0, double y0, double z0,  // top-left
                              double x1, double y1, double z1,  // bottom-left
                              double x2, double y2, double z2,  // bottom-right
                              double x3, double y3, double z3) { // top-right
-        // Inset half a texel-ish to avoid bleeding between atlas cells.
-        double e = 0.0015;
-        double u0 = col / 3.0 + e;
-        double u1 = (col + 1) / 3.0 - e;
-        double v0 = row / 2.0 + e;
-        double v1 = (row + 1) / 2.0 - e;
+        double u0 = col / 3.0 + eu;
+        double u1 = (col + 1) / 3.0 - eu;
+        double v0 = row / 2.0 + ev;
+        double v1 = (row + 1) / 2.0 - ev;
         w.pos(x0, y0, z0).tex(u0, v0).color(c, c, c, 255).endVertex();
         w.pos(x1, y1, z1).tex(u0, v1).color(c, c, c, 255).endVertex();
         w.pos(x2, y2, z2).tex(u1, v1).color(c, c, c, 255).endVertex();

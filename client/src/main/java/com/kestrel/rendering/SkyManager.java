@@ -57,7 +57,8 @@ public final class SkyManager {
     private String loadedId;
     private String loadingId;
     private ResourceLocation texture;
-    private boolean textureIsDynamic;
+    private int textureWidth;
+    private int textureHeight;
     private WorldClient appliedWorld;
     private boolean appliedState;
     private String lastError;
@@ -98,6 +99,15 @@ public final class SkyManager {
 
     ResourceLocation texture() {
         return texture;
+    }
+
+    /** Size of the loaded atlas in texels (0 when none is loaded). */
+    int textureWidth() {
+        return textureWidth;
+    }
+
+    int textureHeight() {
+        return textureHeight;
     }
 
     public String lastError() {
@@ -141,6 +151,14 @@ public final class SkyManager {
     /** Load/unload according to the config. Cheap when nothing changed. */
     public void apply() {
         ClientConfig.Sky cfg = config();
+        String resolved = catalog.resolve(cfg.preset);
+        if (!resolved.equals(cfg.preset) && !catalog.entries().isEmpty()) {
+            // A sky from the old collection (or one that no longer exists): switch to its
+            // replacement once and save, instead of failing to load it every time.
+            KestrelMod.LOG.info("[Kestrel] sky '{}' is no longer bundled; using '{}'", cfg.preset, resolved);
+            cfg.preset = resolved;
+            client.configManager().markDirty();
+        }
         if (!cfg.enabled) {
             if (texture != null || loadingId != null) {
                 loadingId = null;
@@ -155,34 +173,43 @@ public final class SkyManager {
 
     private void load(final String id) {
         lastError = null;
+        final Callable<BufferedImage> decode;
         if (!id.startsWith(CUSTOM_PREFIX)) {
-            boolean known = catalog.get(id) != null;
+            // Bundled skies are decoded off the game thread too (a 3072x2048 atlas takes a
+            // noticeable moment), and freed again on unload, so switching skies neither
+            // stutters nor keeps every sky ever shown in memory.
             ResourceLocation loc = new ResourceLocation(KestrelMod.MODID, "textures/sky/" + id + ".png");
-            if (!known || !TextureLoader.resourceExists(loc)) {
+            final byte[] png;
+            try {
+                if (catalog.get(id) == null) throw new java.io.IOException("not in the catalog");
+                png = TextureLoader.readResource(loc);
+            } catch (java.io.IOException e) {
                 fail(id, "sky texture not found");
                 return;
             }
-            loadingId = null; // cancel any in-flight custom load
-            unload();
-            texture = loc; // vanilla TextureManager loads and caches it on first bind
-            textureIsDynamic = false;
-            loadedId = id;
-            return;
-        }
-        final String name = id.substring(CUSTOM_PREFIX.length());
-        if (name.contains("/") || name.contains("\\") || name.contains("..")) {
-            fail(id, "invalid sky file name");
-            return;
-        }
-        final File file = new File(customDir, name);
-        loadingId = id;
-        client.loader().submit(new Callable<BufferedImage>() {
-            @Override
-            public BufferedImage call() throws Exception {
-                ImageValidation.validateSky(ImageValidation.readPngHeader(file, MAX_FILE_BYTES));
-                return TextureLoader.decodePng(file);
+            decode = new Callable<BufferedImage>() {
+                @Override
+                public BufferedImage call() throws Exception {
+                    return TextureLoader.decodePng(png);
+                }
+            };
+        } else {
+            final String name = id.substring(CUSTOM_PREFIX.length());
+            if (name.contains("/") || name.contains("\\") || name.contains("..")) {
+                fail(id, "invalid sky file name");
+                return;
             }
-        }, new AsyncLoader.Callback<BufferedImage>() {
+            final File file = new File(customDir, name);
+            decode = new Callable<BufferedImage>() {
+                @Override
+                public BufferedImage call() throws Exception {
+                    ImageValidation.validateSky(ImageValidation.readPngHeader(file, MAX_FILE_BYTES));
+                    return TextureLoader.decodePng(file);
+                }
+            };
+        }
+        loadingId = id;
+        client.loader().submit(decode, new AsyncLoader.Callback<BufferedImage>() {
             @Override
             public void done(BufferedImage img, Throwable error) {
                 if (!id.equals(loadingId)) return;
@@ -193,7 +220,8 @@ public final class SkyManager {
                 }
                 unload();
                 texture = TextureLoader.upload("kestrel_sky", img);
-                textureIsDynamic = true;
+                textureWidth = img.getWidth();
+                textureHeight = img.getHeight();
                 loadedId = id;
                 appliedWorld = null;
                 KestrelMod.LOG.info("[Kestrel] loaded sky {}", id);
@@ -208,10 +236,12 @@ public final class SkyManager {
     }
 
     private void unload() {
-        if (texture != null && textureIsDynamic) {
+        if (texture != null) {
             TextureLoader.delete(texture);
         }
         texture = null;
+        textureWidth = 0;
+        textureHeight = 0;
         loadedId = null;
         appliedWorld = null;
     }

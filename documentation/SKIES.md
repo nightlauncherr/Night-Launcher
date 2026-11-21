@@ -23,18 +23,23 @@ Put PNG files in `%LOCALAPPDATA%\Night Launcher\instance\kestrel\skies\` (Night 
 - **down**: image top edge borders north (−Z), left edge borders west (−X).
 
 The exact corner table is in `client/src/main/java/com/kestrel/rendering/SkyboxRenderer.java`.
-`tools/gen_assets.py` uses the same table, so you can adapt it to bake your own seamless
-skies from any function of view direction.
+`tools/skylib.py` uses the same table (`FACES`), so you can use it to bake your own seamless
+skies from any function of view direction (`render_atlas`).
 
 ## Bundled skies
 
 `client/src/main/resources/assets/kestrel/skies.json` lists the bundled skies (id, name,
-category); atlases are `textures/sky/<id>.png` and menu thumbnails (the north/east/south
-strip, 384x128) `textures/sky/thumbs/<id>.png`. The launcher embeds the same file. Categories:
-Sunsets, Space, Clouds & Aurora, Dark, Neon, Fantasy, Minimal, Blocky and Night; uploads are
-listed under Custom, and "Vanilla sky" turns the custom sky off. Switching applies
-immediately in game (no restart). `tools/gen_cosmetics.py` generates the bundled skies
-(seam-free, same corner table) and their thumbnails.
+category); atlases are `textures/sky/<id>.png` (1024 px faces) and menu thumbnails (the
+north/east/south strip, 384x128) `textures/sky/thumbs/<id>.png`. The launcher embeds the same
+file. Categories: Sunsets, Space, Clouds & Aurora, Dark, Abstract, Fantasy, Simple and Night;
+uploads are listed under Custom, and "Vanilla sky" turns the custom sky off. Switching applies
+immediately in game (no restart).
+
+`tools/gen_skies.py` generates the bundled skies and their thumbnails from code (no external
+art; `--preview ID ...` renders camera views for checking), and `tools/check_skies.py` checks
+the atlases for size, catalog consistency and seams. A saved selection of a sky that is no
+longer bundled moves to the closest current sky (`SkyCatalog.RETIRED` in the client,
+`RETIRED_SKIES` in the launcher), or to Golden Hour.
 
 Custom skies apply in the Overworld only and replace the sun, moon and stars while enabled.
 If another mod installs its own sky renderer, Night leaves it alone and reports it.

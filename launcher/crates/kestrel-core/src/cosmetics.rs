@@ -185,12 +185,61 @@ pub const SKY_CATEGORIES: &[(&str, &str)] = &[
     ("space", "Space"),
     ("atmospheric", "Clouds & Aurora"),
     ("dark", "Dark"),
-    ("neon", "Neon"),
+    ("neon", "Abstract"),
     ("fantasy", "Fantasy"),
-    ("minimal", "Minimal"),
-    ("blocky", "Blocky"),
+    ("minimal", "Simple"),
     ("kestrel", "Night"),
 ];
+
+/// The sky chosen when nothing (or nothing that still exists) is selected.
+/// Must match `SkyCatalog.DEFAULT_ID`.
+pub const DEFAULT_SKY: &str = "golden_hour";
+
+/// Skies of the old bundled collection (replaced in 1.6.0) and the new sky
+/// closest to each. Must match `SkyCatalog.RETIRED`.
+const RETIRED_SKIES: &[(&str, &str)] = &[
+    ("dusk", "soft_sunset"),
+    ("starry", "starlight"),
+    ("nebula", "orion_veil"),
+    ("pink_sunrise", "alpine_dawn"),
+    ("crimson_sunset", "tropical_blaze"),
+    ("desert_dusk", "desert_haze"),
+    ("galaxy_core", "milky_way"),
+    ("deep_space", "starlight"),
+    ("crimson_nebula", "orion_veil"),
+    ("violet_nebula", "night_nebula"),
+    ("aurora_borealis", "aurora_curtains"),
+    ("violet_aurora", "aurora_curtains"),
+    ("cumulus", "fair_weather"),
+    ("overcast", "soft_clouds"),
+    ("stormfront", "storm_front"),
+    ("eclipse", "corona"),
+    ("neon_dusk", "neon_flux"),
+    ("frozen_twilight", "noctilucent"),
+    ("cotton_candy", "pastel"),
+    ("azure", "clear_blue"),
+    ("monochrome", "slate"),
+    ("void_realm", "moonless"),
+    ("ember_haze", "ashfall"),
+    ("blocky_noon", "fair_weather"),
+    ("kestrel_ember", "night_nebula"),
+];
+
+/// The sky id to use for a saved selection: itself when bundled (or a custom
+/// sky, `custom:...`), its replacement when it was retired, else the default.
+pub fn resolve_sky(id: &str) -> String {
+    let catalog = sky_catalog();
+    let bundled = |i: &str| catalog.iter().any(|s| s.id == i);
+    if id.starts_with(CUSTOM_PREFIX) || bundled(id) {
+        return id.to_string();
+    }
+    if let Some((_, to)) = RETIRED_SKIES.iter().find(|(from, _)| *from == id)
+        && bundled(to)
+    {
+        return (*to).to_string();
+    }
+    DEFAULT_SKY.to_string()
+}
 
 /// A bundled sky from `skies.json` (atlas `sky/<id>.png`, thumbnail `sky/thumbs/<id>.png`).
 #[derive(Debug, Clone, Deserialize)]
@@ -881,7 +930,7 @@ impl Default for CosmeticSettings {
             },
             sky: SkySettings {
                 enabled: false,
-                preset: "dusk".into(),
+                preset: DEFAULT_SKY.into(),
                 brightness: 1.0,
                 rotate: true,
             },
@@ -903,9 +952,8 @@ impl CosmeticSettings {
         if self.cosmetics.cape.is_empty() {
             self.cosmetics.cape = CAPE_NONE.into();
         }
-        if self.sky.preset.is_empty() {
-            self.sky.preset = "dusk".into();
-        }
+        // Empty, retired (old collection) or unknown bundled skies move to a bundled one.
+        self.sky.preset = resolve_sky(&self.sky.preset);
         if !KILL_EFFECTS
             .iter()
             .any(|e| e.id == self.kill_effects.effect)
@@ -1803,6 +1851,25 @@ mod tests {
     }
 
     #[test]
+    fn saved_selections_of_retired_skies_move_to_a_bundled_sky() {
+        let catalog = sky_catalog();
+        let bundled = |id: &str| catalog.iter().any(|s| s.id == id);
+        assert!(bundled(DEFAULT_SKY));
+        for (from, to) in RETIRED_SKIES {
+            assert!(!bundled(from), "{from} is retired but still bundled");
+            assert!(bundled(to), "{from} moves to {to}, which isn't bundled");
+            assert_eq!(resolve_sky(from), *to);
+        }
+        // Bundled and custom selections are kept; anything else falls back to the default.
+        assert_eq!(resolve_sky("milky_way"), "milky_way");
+        assert_eq!(resolve_sky("custom:my sky.png"), "custom:my sky.png");
+        assert_eq!(resolve_sky("no_such_sky"), DEFAULT_SKY);
+        assert_eq!(resolve_sky(""), DEFAULT_SKY);
+        // Must stay in step with the client's SkyCatalog.RETIRED (both are checked by tests).
+        assert_eq!(RETIRED_SKIES.len(), 25);
+    }
+
+    #[test]
     fn state_reads_config_then_pending_request() {
         let (_d, l) = layout();
         // No files: defaults.
@@ -1820,7 +1887,8 @@ mod tests {
         let s = load_state(&l);
         assert!(!s.pending);
         assert_eq!(s.settings.cosmetics.cape, "ember");
-        assert_eq!(s.settings.sky.preset, "starry");
+        // "starry" was retired in the sky remake; saved selections move to its replacement.
+        assert_eq!(s.settings.sky.preset, "starlight");
         assert_eq!(s.settings.kill_effects.effect, "lightning");
         assert_eq!(s.settings.kill_effects.color, 0xFFE8_873A);
 

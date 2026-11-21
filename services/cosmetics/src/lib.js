@@ -36,6 +36,8 @@
 //
 // Storage: Workers KV namespace bound as CAPES: key = uuid (32 hex, no dashes) for the cape,
 // "ent:<uuid>" for an account's redemptions, "count:<CODE>" for codes with a global limit.
+// A cape entry is {"cape", "ts" (the request's time), "updated"}; a removed cape leaves a
+// {"cape": "none"} marker for a few minutes so older requests can't be replayed over it.
 
 import { PLAYER_CERTIFICATE_KEYS } from "./mojang-keys.js";
 import { BUILTIN_GRANTS, CAPE_REQUIREMENTS, CODES, REWARDS, checkTables, expandRewards, normalizeCode } from "./rewards.js";
@@ -47,6 +49,8 @@ export const OFFICIAL_CAPES = "official_capes";
 const MAX_LOOKUP = 100;
 const MAX_BODY = 4096;
 const MAX_SKEW_SECONDS = 120;
+// How long a removed cape's marker is kept: longer than any request can stay valid.
+const TOMBSTONE_TTL = 4 * MAX_SKEW_SECONDS;
 const UUID_RE = /^[0-9a-f]{32}$/;
 const NONCE_RE = /^[0-9a-f]{16,64}$/;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -209,10 +213,18 @@ async function publish(request, uuidPart, env, now, mojangKeys) {
 
   // Write only on change: KV writes are the scarce resource on the free plan.
   const current = await env.CAPES.get(uuid, "json");
+  // A request older than the one already applied changes nothing, so a captured request
+  // replayed inside the two-minute window can't put back a cape the player has since changed.
+  if (current && Number.isInteger(current.ts) && body.ts < current.ts) {
+    return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+  }
   if (cape === "none") {
-    if (current) await env.CAPES.delete(uuid);
+    // A short-lived marker instead of a delete keeps that ordering for removals too.
+    if (current && current.cape !== "none") {
+      await env.CAPES.put(uuid, JSON.stringify({ cape: "none", ts: body.ts, updated: now }), { expirationTtl: TOMBSTONE_TTL });
+    }
   } else if (!current || current.cape !== cape) {
-    await env.CAPES.put(uuid, JSON.stringify({ cape, updated: now }));
+    await env.CAPES.put(uuid, JSON.stringify({ cape, ts: body.ts, updated: now }));
   }
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
 }

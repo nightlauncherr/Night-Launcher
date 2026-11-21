@@ -19,7 +19,41 @@ import java.util.Set;
  */
 public final class SkyCatalog {
     /** Menu categories, in display order. */
-    public static final String[] CATEGORIES = {"sunsets", "space", "atmospheric", "dark", "neon", "fantasy", "minimal", "blocky", "kestrel"};
+    public static final String[] CATEGORIES = {"sunsets", "space", "atmospheric", "dark", "neon", "fantasy", "minimal", "kestrel"};
+
+    /** The sky chosen when nothing (or nothing that still exists) is selected. */
+    public static final String DEFAULT_ID = "golden_hour";
+
+    /**
+     * Skies of the old bundled collection (replaced in 1.6.0) and the new sky
+     * closest to each, so a saved selection keeps a similar look instead of
+     * failing to load. Ids reused by the new collection are not listed.
+     */
+    private static final String[][] RETIRED = {
+            {"dusk", "soft_sunset"}, {"starry", "starlight"}, {"nebula", "orion_veil"},
+            {"pink_sunrise", "alpine_dawn"}, {"crimson_sunset", "tropical_blaze"}, {"desert_dusk", "desert_haze"},
+            {"galaxy_core", "milky_way"}, {"deep_space", "starlight"}, {"crimson_nebula", "orion_veil"},
+            {"violet_nebula", "night_nebula"}, {"aurora_borealis", "aurora_curtains"}, {"violet_aurora", "aurora_curtains"},
+            {"cumulus", "fair_weather"}, {"overcast", "soft_clouds"}, {"stormfront", "storm_front"},
+            {"eclipse", "corona"}, {"neon_dusk", "neon_flux"}, {"frozen_twilight", "noctilucent"},
+            {"cotton_candy", "pastel"}, {"azure", "clear_blue"}, {"monochrome", "slate"},
+            {"void_realm", "moonless"}, {"ember_haze", "ashfall"}, {"blocky_noon", "fair_weather"},
+            {"kestrel_ember", "night_nebula"},
+    };
+
+    /**
+     * The id to use for a saved bundled-sky selection: itself when it exists,
+     * its replacement when it was retired, otherwise the default. Custom skies
+     * ("custom:...") are returned unchanged.
+     */
+    public String resolve(String id) {
+        if (id == null || id.isEmpty()) return DEFAULT_ID;
+        if (id.startsWith("custom:") || get(id) != null) return id;
+        for (String[] r : RETIRED) {
+            if (r[0].equals(id) && get(r[1]) != null) return r[1];
+        }
+        return get(DEFAULT_ID) != null || entries.isEmpty() ? DEFAULT_ID : entries.get(0).id;
+    }
 
     public static final class Entry {
         public final String id;
@@ -66,8 +100,9 @@ public final class SkyCatalog {
     public static String categoryLabel(String category) {
         if ("atmospheric".equals(category)) return "Clouds & Aurora";
         if ("sunsets".equals(category)) return "Sunsets";
-        if ("blocky".equals(category)) return "Blocky";
         if ("kestrel".equals(category)) return "Night"; // id kept for saved settings
+        if ("neon".equals(category)) return "Abstract";
+        if ("minimal".equals(category)) return "Simple";
         return Character.toUpperCase(category.charAt(0)) + category.substring(1);
     }
 
