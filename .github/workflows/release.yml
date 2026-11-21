@@ -74,6 +74,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'git checkout failed' }
           # Gradle runs on JDK 17 (it downloads Java 8 for the mod itself).
           "JAVA_HOME=$env:JAVA_HOME_17_X64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Java 8 toolchain for the mod: the runner's preinstalled JDK 8 (the foojay
+          # download stays as a fallback; its Windows JDK 8 archive can be unusable).
+          if (-not $env:JAVA_HOME_8_X64 -or -not (Test-Path (Join-Path $env:JAVA_HOME_8_X64 'bin\javac.exe'))) {
+            throw 'JDK 8 not found on the runner (JAVA_HOME_8_X64).'
+          }
+          $gradleHome = Join-Path $env:USERPROFILE '.gradle'
+          New-Item -ItemType Directory -Force -Path $gradleHome | Out-Null
+          Add-Content -Path (Join-Path $gradleHome 'gradle.properties') -Value 'org.gradle.java.installations.fromEnv=JAVA_HOME_8_X64' -Encoding ascii
           rustup update stable --no-self-update
           rustup default stable
           rustup component add rustfmt clippy
